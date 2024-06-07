@@ -1,0 +1,95 @@
+#-------------------------------------------------------------------------------
+# Copyright 2024 Michael P Williams. All rights reserved.
+#-------------------------------------------------------------------------------
+
+name:                cesk-machine
+version:             0.1.0.0
+github:              "mlcfp/cesk-machine"
+license:             BSD-3-Clause
+author:              "Michael P Williams"
+maintainer:          "mlcfp@icloud.com"
+copyright:           "2024 Michael P Williams"
+
+extra-source-files:
+- README.md
+- CHANGELOG.md
+
+# Metadata used when publishing your package
+# synopsis:            Short description of your package
+# category:            Web
+
+# To avoid duplicated efforts in documentation and dealing with the
+# complications of embedding Haddock markup inside cabal files, it is
+# common to point users to the README.md file.
+description:         Please see the README on GitHub at <https://github.com/githubuser/cesk-machine#readme>
+
+language: GHC2021
+
+default-extensions:
+- DataKinds
+- DuplicateRecordFields
+- LambdaCase
+- MultiWayIf
+- OverloadedRecordDot
+- OverloadedStrings
+- QuasiQuotes
+- RecordWildCards
+- TemplateHaskell
+- TypeFamilies
+- UnicodeSyntax
+
+dependencies:
+- base >= 4.7 && < 5
+# - bytestring
+- containers
+- data-default
+# - extra
+- megaparsec
+# - mtl
+- raw-strings-qq
+# - safe
+- text
+- time
+
+ghc-options:
+- -Wall
+- -Wcompat
+- -Widentities
+- -Wincomplete-record-updates
+- -Wincomplete-uni-patterns
+- -Wmissing-export-lists
+- -Wmissing-home-modules
+- -Wno-orphans
+- -Wpartial-fields
+- -Wredundant-constraints
+
+library:
+  source-dirs: src
+
+executables:
+  cesk-machine:
+    main: Main.hs
+    source-dirs: app
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - cesk-machine
+    - optparse-applicative
+
+tests:
+  cesk-machine-test:
+    main: Test.hs
+    source-dirs: test
+    # other-modules:
+    # - TestDatabase
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - HUnit
+    - test-framework
+    - test-framework-hunit
+    - cesk-machine

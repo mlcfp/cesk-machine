@@ -1,0 +1,126 @@
+cabal-version: 2.2
+
+-- This file has been generated from package.yaml by hpack version 0.36.0.
+--
+-- see: https://github.com/sol/hpack
+
+name:           cesk-machine
+version:        0.1.0.0
+description:    Please see the README on GitHub at <https://github.com/githubuser/cesk-machine#readme>
+homepage:       https://github.com/mlcfp/cesk-machine#readme
+bug-reports:    https://github.com/mlcfp/cesk-machine/issues
+author:         Michael P Williams
+maintainer:     mlcfp@icloud.com
+copyright:      2024 Michael P Williams
+license:        BSD-3-Clause
+license-file:   LICENSE
+build-type:     Simple
+extra-source-files:
+    README.md
+    CHANGELOG.md
+
+source-repository head
+  type: git
+  location: https://github.com/mlcfp/cesk-machine
+
+library
+  exposed-modules:
+      ANF
+      CESK
+  other-modules:
+      Paths_cesk_machine
+  autogen-modules:
+      Paths_cesk_machine
+  hs-source-dirs:
+      src
+  default-extensions:
+      DataKinds
+      DuplicateRecordFields
+      LambdaCase
+      MultiWayIf
+      OverloadedRecordDot
+      OverloadedStrings
+      QuasiQuotes
+      RecordWildCards
+      TemplateHaskell
+      TypeFamilies
+      UnicodeSyntax
+  ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wno-orphans -Wpartial-fields -Wredundant-constraints
+  build-depends:
+      base >=4.7 && <5
+    , containers
+    , data-default
+    , megaparsec
+    , raw-strings-qq
+    , text
+    , time
+  default-language: GHC2021
+
+executable cesk-machine
+  main-is: Main.hs
+  other-modules:
+      Paths_cesk_machine
+  autogen-modules:
+      Paths_cesk_machine
+  hs-source-dirs:
+      app
+  default-extensions:
+      DataKinds
+      DuplicateRecordFields
+      LambdaCase
+      MultiWayIf
+      OverloadedRecordDot
+      OverloadedStrings
+      QuasiQuotes
+      RecordWildCards
+      TemplateHaskell
+      TypeFamilies
+      UnicodeSyntax
+  ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wno-orphans -Wpartial-fields -Wredundant-constraints -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      base >=4.7 && <5
+    , cesk-machine
+    , containers
+    , data-default
+    , megaparsec
+    , optparse-applicative
+    , raw-strings-qq
+    , text
+    , time
+  default-language: GHC2021
+
+test-suite cesk-machine-test
+  type: exitcode-stdio-1.0
+  main-is: Test.hs
+  other-modules:
+      Paths_cesk_machine
+  autogen-modules:
+      Paths_cesk_machine
+  hs-source-dirs:
+      test
+  default-extensions:
+      DataKinds
+      DuplicateRecordFields
+      LambdaCase
+      MultiWayIf
+      OverloadedRecordDot
+      OverloadedStrings
+      QuasiQuotes
+      RecordWildCards
+      TemplateHaskell
+      TypeFamilies
+      UnicodeSyntax
+  ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wno-orphans -Wpartial-fields -Wredundant-constraints -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      HUnit
+    , base >=4.7 && <5
+    , cesk-machine
+    , containers
+    , data-default
+    , megaparsec
+    , raw-strings-qq
+    , test-framework
+    , test-framework-hunit
+    , text
+    , time
+  default-language: GHC2021
