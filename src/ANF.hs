@@ -11,6 +11,7 @@ module ANF
   , Prog(..)
   , Var(..)
   , parseANF
+  , runTest
   ) where
 
 import Control.Monad (void)
@@ -115,6 +116,13 @@ parseCExp = choice
   , parseApp
   ]
 
+parseExp :: Parser Exp
+parseExp = choice
+  [ try $ ExpAtomic <$> parseAExp
+  , try $ ExpComplex <$> parseCExp
+  , parseLet
+  ]
+
 parseIf :: Parser CExp
 parseIf =
   parens $ do
@@ -134,7 +142,9 @@ parseSet =
     CExpSet <$> parseVar <*> parseAExp
 
 parseApp :: Parser CExp
-parseApp = CExpApp <$> some parseAExp
+parseApp =
+  parens $ do
+    CExpApp <$> some parseAExp
 
 parseBinding :: Parser (Var, AExp)
 parseBinding = parens $ (,) <$> parseVar <*> parseAExp
@@ -157,18 +167,10 @@ parseLetrec =
   parens $ do
     void $ symbol "letrec"
     void $ symbol "("
-    bindings <- some $ parens $ parseBinding
+    bindings <- some parseBinding
     void $ symbol ")"
     body <- parseExp
     pure $ CExpLetRec bindings body
-
-
-parseExp :: Parser Exp
-parseExp = choice
-  [ try $ ExpAtomic <$> parseAExp
-  , try $ ExpComplex <$> parseCExp
-  , parseLet
-  ]
 
 prim :: Parser Prim
 prim = choice
@@ -180,7 +182,8 @@ prim = choice
   ]
 
 sc :: Parser ()
-sc = L.space space1 empty empty
+-- sc = L.space space1 empty empty
+sc = L.space space1 (L.skipLineComment ";") (L.skipBlockComment "#|" "|#")
 
 lexeme :: Parser a -> Parser a
 lexeme = L.lexeme sc
@@ -220,3 +223,6 @@ parseANF = runParser parseExp ""
 -- parseANF :: Text -> Either (ParseErrorBundle Text Void) (Var, Int)
 -- parseANF :: Text -> Either (ParseErrorBundle Text Void) ()
 -- parseANF = runParser parseANFTest ""
+
+runTest :: Text -> IO ()
+runTest  = parseTest parseExp

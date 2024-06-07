@@ -27,8 +27,13 @@ main = do
   -- let a = parseANF "(let (( y  1 )) x )"
   -- let a = parseANF "(let (( y  1 )) (λ (x y) #f) )"
   -- let a = parseANF "(let (( y  1 )) (let (( x  2 )) (* 2 3) ))"
-  let a = parseANF "(let (( y  1 )) (call/cc 2))"
-  putStrLn $ show a
+  -- let a = parseANF "(let (( y  1 )) (call/cc 2))"
+  -- let a = parseANF "(letrec (( y  1 )) x )"
+  -- let a = parseANF s1
+  -- putStrLn $ show a
+
+  -- runTest "(letrec (( y  1 )) x )"
+  runTest s1
 
 p0 = Prog (ExpAtomic $ AExpInt 6)
 
@@ -113,3 +118,16 @@ s0 = [r|
   (let ((x 1))
     x)
 |]
+
+s1 = [r|(letrec ((f
+    (λ (n)
+      (let ((g1 (= n 0)))
+        (if g1
+          1
+          (let ((g2 (- n 1)))
+            (let ((g3 (f g2)))
+              (* n g3))))))
+  #|
+              |#
+    ))
+    (f 20))|]

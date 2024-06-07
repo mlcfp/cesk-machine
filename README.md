@@ -1,5 +1,11 @@
 # cesk-machine
 
+## New Functional Language
+
+Name ideas
+- Havoc
+- Mahem (could be abbreviate `mh` which is close to `ml`)
+
 ## TODO
 
 - ANF parser
