@@ -93,6 +93,7 @@ test-suite cesk-machine-test
   type: exitcode-stdio-1.0
   main-is: Test.hs
   other-modules:
+      TestANF
       Paths_cesk_machine
   autogen-modules:
       Paths_cesk_machine

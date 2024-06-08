@@ -6,9 +6,10 @@ module Main
   ( main
   ) where
 
-import Test.Framework (defaultMain)
+import Test.Framework
+import qualified TestANF
 
 main :: IO ()
 main = defaultMain
-  [
+  [ TestANF.tests
   ]

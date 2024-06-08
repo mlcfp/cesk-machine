@@ -47,7 +47,7 @@ evalProg state@(State (ExpAtomic _) _ _ Halt) =
 evalProg state = evalProg $ step state
 
 inject :: Prog -> State
-inject (Prog exp) = State exp Map.empty Map.empty Halt
+inject (Prog ((DecExp exp):[])) = State exp Map.empty Map.empty Halt
 
 evalAtomic :: Env -> Store -> AExp -> Val
 evalAtomic env store = \case

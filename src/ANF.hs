@@ -5,12 +5,14 @@
 module ANF
   ( AExp(..)
   , CExp(..)
+  , Dec(..)
   , Exp(..)
   , Lam(..)
   , Prim(..)
   , Prog(..)
   , Var(..)
-  , parseANF
+  , anfExp
+  , anfProg
   , runTest
   ) where
 
@@ -48,8 +50,6 @@ newtype Var = Var Text deriving (Eq, Ord, Show)
 
 data Lam = Lam [Var] Exp deriving (Eq, Ord, Show)
 
--- data Binding = Binding Var AExp deriving (Eq, Ord, Show)
-
 data AExp
   = AExpLam Lam
   | AExpVar Var
@@ -81,21 +81,37 @@ data Prim
   | PrimEq
   deriving (Eq, Ord, Show)
 
-data Prog = Prog Exp deriving (Eq, Ord, Show)
+data Dec
+  = DecDefine Var Exp
+  -- | DecBegin [Dec] -- do we want this?
+  | DecExp Exp
+  deriving (Eq, Ord, Show)
 
+data Prog = Prog [Dec] deriving (Eq, Ord, Show)
 
 type Parser = Parsec Void Text
 
-parseVar :: Parser Var
-parseVar = Var <$> identifier
+parseProg :: Parser Prog
+parseProg = spaceConsumer >> (Prog <$> some parseDec)
 
-parseLam :: Parser Lam
-parseLam =
+parseDec :: Parser Dec
+parseDec = choice
+  [ try parseDefine
+  , DecExp <$> parseExp
+  ]
+
+parseDefine :: Parser Dec
+parseDefine =
   parens $ do
-    void $ symbol "λ"
-    vars <- parens $ many parseVar
-    exp <- parseExp
-    pure $ Lam vars exp
+    void $ symbol "define"
+    DecDefine <$> parseVar <*> parseExp
+
+parseExp :: Parser Exp
+parseExp = choice
+  [ try $ ExpAtomic <$> parseAExp
+  , try $ ExpComplex <$> parseCExp
+  , parseLet
+  ]
 
 parseAExp :: Parser AExp
 parseAExp = choice
@@ -116,12 +132,16 @@ parseCExp = choice
   , parseApp
   ]
 
-parseExp :: Parser Exp
-parseExp = choice
-  [ try $ ExpAtomic <$> parseAExp
-  , try $ ExpComplex <$> parseCExp
-  , parseLet
-  ]
+parseVar :: Parser Var
+parseVar = Var <$> identifier
+
+parseLam :: Parser Lam
+parseLam =
+  parens $ do
+    void $ symbol "λ"
+    vars <- parens $ many parseVar
+    exp <- parseExp
+    pure $ Lam vars exp
 
 parseIf :: Parser CExp
 parseIf =
@@ -142,9 +162,7 @@ parseSet =
     CExpSet <$> parseVar <*> parseAExp
 
 parseApp :: Parser CExp
-parseApp =
-  parens $ do
-    CExpApp <$> some parseAExp
+parseApp = parens $ CExpApp <$> some parseAExp
 
 parseBinding :: Parser (Var, AExp)
 parseBinding = parens $ (,) <$> parseVar <*> parseAExp
@@ -181,18 +199,19 @@ prim = choice
   , PrimEq  <$ symbol "="
   ]
 
-sc :: Parser ()
--- sc = L.space space1 empty empty
-sc = L.space space1 (L.skipLineComment ";") (L.skipBlockComment "#|" "|#")
+spaceConsumer :: Parser ()
+spaceConsumer =
+  L.space space1
+    (L.skipLineComment ";")
+    (L.skipBlockComment "#|" "|#")
 
 lexeme :: Parser a -> Parser a
-lexeme = L.lexeme sc
+lexeme = L.lexeme spaceConsumer
 
 symbol :: Text -> Parser Text
-symbol = L.symbol sc
+symbol = L.symbol spaceConsumer
 
 integer :: Parser Integer
--- integer :: Parser Int
 integer = lexeme L.decimal
 
 identifier :: Parser Text
@@ -201,7 +220,6 @@ identifier = lexeme $ do
   y <- many alphaNumChar
   pure $ T.pack x <> T.pack y
 
--- parens :: Applicative m => m open -> m close -> m a -> m a
 parens :: Parser a -> Parser a
 parens = between (symbol "(") (symbol ")")
 
@@ -215,8 +233,11 @@ parens = between (symbol "(") (symbol ")")
 -- float = lexeme L.float
 
 
-parseANF :: Text -> Either (ParseErrorBundle Text Void) Exp
-parseANF = runParser parseExp ""
+anfExp :: Text -> Either (ParseErrorBundle Text Void) Exp
+anfExp = runParser parseExp ""
+
+anfProg :: Text -> Either (ParseErrorBundle Text Void) Prog
+anfProg = runParser parseProg ""
 
 -- parseANF :: Text -> Either (ParseErrorBundle Text Void) Var
 -- parseANF :: Text -> Either (ParseErrorBundle Text Void) (Var, Int, Var)

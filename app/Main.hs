@@ -35,33 +35,33 @@ main = do
   -- runTest "(letrec (( y  1 )) x )"
   runTest s1
 
-p0 = Prog (ExpAtomic $ AExpInt 6)
+-- p0 = Prog (ExpAtomic $ AExpInt 6)
 
-p1 = Prog
-  (ExpLet (Var "x") (ExpAtomic $ AExpTrue)
-    (ExpAtomic $ AExpVar $ Var "x"))
+-- p1 = Prog
+--   (ExpLet (Var "x") (ExpAtomic $ AExpTrue)
+--     (ExpAtomic $ AExpVar $ Var "x"))
 
-p2 = Prog
-  (ExpLet (Var "x") (ExpAtomic $ AExpInt 1)
-    (ExpLet (Var "y") (ExpAtomic $ AExpInt 2)
-      (ExpAtomic $ AExpPrim PrimAdd
-        [ AExpVar $ Var "x"
-        , AExpVar $ Var "y"
-        ])))
+-- p2 = Prog
+--   (ExpLet (Var "x") (ExpAtomic $ AExpInt 1)
+--     (ExpLet (Var "y") (ExpAtomic $ AExpInt 2)
+--       (ExpAtomic $ AExpPrim PrimAdd
+--         [ AExpVar $ Var "x"
+--         , AExpVar $ Var "y"
+--         ])))
 
-p3 = Prog
-  (ExpLet (Var "x") (ExpAtomic $ AExpInt 1)
-    (ExpLet (Var "y") (ExpAtomic $ AExpInt 2)
-      (ExpAtomic $ AExpPrim PrimAdd
-        [ AExpInt 3
-        , AExpInt 4
-        ])))
+-- p3 = Prog
+--   (ExpLet (Var "x") (ExpAtomic $ AExpInt 1)
+--     (ExpLet (Var "y") (ExpAtomic $ AExpInt 2)
+--       (ExpAtomic $ AExpPrim PrimAdd
+--         [ AExpInt 3
+--         , AExpInt 4
+--         ])))
 
-p4 = Prog
-  (ExpAtomic $ AExpPrim PrimEq
-    [ AExpInt 1
-    , AExpInt 1
-    ])
+-- p4 = Prog
+--   (ExpAtomic $ AExpPrim PrimEq
+--     [ AExpInt 1
+--     , AExpInt 1
+--     ])
 
 
 --  (define (f n)
@@ -82,36 +82,6 @@ p4 = Prog
 --             (let ((g1480 (f g1479)))
 --               (* n g1480)))))))
 --   (f 20)
-
-pFactoral = Prog
-  (ExpComplex $ CExpLetRec [(Var "f",
-    (AExpLam $ Lam [Var "n"]
-      (ExpLet (Var "g1")
-        (ExpAtomic $ AExpPrim PrimEq
-          [ AExpVar (Var "n")
-          , AExpInt 0
-          ])
-        (ExpComplex $ CExpIf (AExpVar $ Var "g1")
-          (ExpAtomic $ AExpInt 1)
-          (ExpLet (Var "g2")
-            (ExpAtomic $ AExpPrim PrimSub
-              [ AExpVar (Var "n")
-              , AExpInt 1
-              ])
-            (ExpLet (Var "g3")
-              (ExpComplex $ CExpApp
-                [ AExpVar (Var "f")
-                , AExpVar (Var "g2")
-                ])
-              (ExpAtomic $ AExpPrim PrimMul
-                [ AExpVar (Var "n")
-                , AExpVar (Var "g3")
-                ]))))))
-    )]
-    (ExpComplex $ CExpApp
-      [ AExpVar (Var "f")
-      , AExpInt 20
-      ]))
 
 
 s0 = [r|
