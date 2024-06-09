@@ -3,7 +3,11 @@
 --------------------------------------------------------------------------------
 
 module CESK
-  ( run
+  ( Addr(..)
+  , Cont(..)
+  , Env(..)
+  , Val(..)
+  , run
   ) where
 
 import ANF
@@ -21,8 +25,7 @@ type Store = Map Addr Val
 data Cont
   = Cont Var Exp Env Cont
   | Halt
-    deriving (Show)
-
+    deriving (Eq, Ord, Show)
 
 data Val
   = ValVoid
@@ -30,7 +33,7 @@ data Val
   | ValBool Bool
   | ValClos Lam Env
   | ValCont Cont
-    deriving (Show)
+    deriving (Eq, Ord, Show)
 
 data State = State Exp Env Store Cont deriving (Show)
 
@@ -46,8 +49,49 @@ evalProg state@(State (ExpAtomic _) _ _ Halt) =
   -- trace ("state: " <> show state) $ state
 evalProg state = evalProg $ step state
 
+envEmpty :: Env
+envEmpty = Map.empty
+
+storeEmpty :: Store
+storeEmpty = Map.empty
+
 inject :: Prog -> State
-inject (Prog ((DecExp exp):[])) = State exp Map.empty Map.empty Halt
+inject (Prog decs) =
+  case [exp | DecExp exp <- decs] of
+    (exp:[]) -> State exp env' store' Halt
+    (exp:_) -> error "too many top level expressions"
+    [] -> error "top level expression missing"
+  where
+    (env', store') = envInit decs envEmpty storeEmpty
+
+    envInit :: [Dec] -> Env -> Store -> (Env, Store)
+    envInit [] env store =
+      (env, store)
+    envInit ((DecExp _):decs) env store =
+      envInit decs env store
+    envInit ((DecDefine var (ExpAtomic (AExpLam lam))):decs) env store =
+      let
+        (e', s') = storeAdd var (ValClos lam envEmpty) env store
+      in
+        envInit decs e' s'
+    envInit ((DecDefine var (ExpAtomic AExpTrue)):decs) env store =
+      let
+        (e', s') = storeAdd var (ValBool True) env store
+      in
+        envInit decs e' s'
+    envInit ((DecDefine var (ExpAtomic AExpFalse)):decs) env store =
+      let
+        (e', s') = storeAdd var (ValBool False) env store
+      in
+        envInit decs e' s'
+    envInit ((DecDefine var (ExpAtomic (AExpInt i))):decs) env store =
+      let
+        (e', s') = storeAdd var (ValInt i) env store
+      in
+        envInit decs e' s'
+    envInit ((DecDefine _ _):_) env store =
+      error "only lambda or constants allowed in definitions"
+
 
 evalAtomic :: Env -> Store -> AExp -> Val
 evalAtomic env store = \case

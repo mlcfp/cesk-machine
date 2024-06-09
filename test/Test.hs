@@ -8,8 +8,10 @@ module Main
 
 import Test.Framework
 import qualified TestANF
+import qualified TestCESK
 
 main :: IO ()
 main = defaultMain
   [ TestANF.tests
+  , TestCESK.tests
   ]

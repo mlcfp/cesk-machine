@@ -8,6 +8,7 @@ module Main
 
 import ANF
 import qualified CESK as CESK
+import Data.Either (fromRight)
 import Data.Time.Clock (diffUTCTime, getCurrentTime)
 import Text.RawString.QQ
 
@@ -31,73 +32,14 @@ main = do
   -- let a = parseANF "(letrec (( y  1 )) x )"
   -- let a = parseANF s1
   -- putStrLn $ show a
-
-  -- runTest "(letrec (( y  1 )) x )"
-  runTest s1
-
--- p0 = Prog (ExpAtomic $ AExpInt 6)
-
--- p1 = Prog
---   (ExpLet (Var "x") (ExpAtomic $ AExpTrue)
---     (ExpAtomic $ AExpVar $ Var "x"))
-
--- p2 = Prog
---   (ExpLet (Var "x") (ExpAtomic $ AExpInt 1)
---     (ExpLet (Var "y") (ExpAtomic $ AExpInt 2)
---       (ExpAtomic $ AExpPrim PrimAdd
---         [ AExpVar $ Var "x"
---         , AExpVar $ Var "y"
---         ])))
-
--- p3 = Prog
---   (ExpLet (Var "x") (ExpAtomic $ AExpInt 1)
---     (ExpLet (Var "y") (ExpAtomic $ AExpInt 2)
---       (ExpAtomic $ AExpPrim PrimAdd
---         [ AExpInt 3
---         , AExpInt 4
---         ])))
-
--- p4 = Prog
---   (ExpAtomic $ AExpPrim PrimEq
---     [ AExpInt 1
---     , AExpInt 1
---     ])
-
-
---  (define (f n)
---        (if (= n 0)
---            1
---            (* n (f (- n 1)))))
-
---   (f 20)
-
---   =>
-
---   (define f
---     (λ (n)
---       (let ((g1478 (= n 0)))
---         (if g1478
---           1
---           (let ((g1479 (- n 1)))
---             (let ((g1480 (f g1479)))
---               (* n g1480)))))))
---   (f 20)
-
-
-s0 = [r|
-  (let ((x 1))
-    x)
-|]
-
-s1 = [r|(letrec ((f
-    (λ (n)
-      (let ((g1 (= n 0)))
-        (if g1
-          1
-          (let ((g2 (- n 1)))
-            (let ((g3 (f g2)))
-              (* n g3))))))
-  #|
-              |#
-    ))
-    (f 20))|]
+  -- runTestProg "(define (y 1)) y"
+  -- runTestProg "(define y (λ (n) (* 2 n))) (y 4)"
+  let x = anfProg [r|
+    (define y (λ (n) (* 2 n)))
+    (define g (λ (x) (+ x 1)))
+    (define sqr (λ (a) (* a a)))
+    ;(sqr 2)
+    (sqr 2)
+  |]
+  let e = CESK.run $ fromRight (error "") x
+  putStrLn $ show e

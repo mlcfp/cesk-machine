@@ -9,11 +9,7 @@ module TestANF
 import ANF
 import Test.Framework (Test, testGroup)
 import Test.Framework.Providers.HUnit (testCase)
-import Test.HUnit
-  ( assertBool
-  , assertEqual
-  , assertFailure
-  )
+import Test.HUnit (assertEqual, assertFailure)
 import Text.RawString.QQ
 
 tests :: Test
@@ -23,6 +19,7 @@ tests = testGroup "ANF"
   , testParseVar
   , testParsePrim
   , testParseLam
+  , testParseLet
   , testProgFactorial
   ]
 
@@ -83,6 +80,13 @@ testParseLam = testCase "lam" $ do
     (Right $ ExpAtomic $ AExpLam (Lam [Var "n", Var "x", Var "y", Var "ggg"]
       (ExpAtomic AExpFalse)))
     (anfExp "(λ (n x y ggg) #f)")
+
+testParseLet :: Test
+testParseLet = testCase "let" $ do
+  assertEqual "prim add"
+    (Right $ (ExpLet (Var "x") (ExpAtomic (AExpInt 1))
+      (ExpAtomic (AExpVar (Var "x")))))
+    (anfExp "(let ((x 1)) x)")
 
 testProgFactorial :: Test
 testProgFactorial = testCase "factorial" $ do

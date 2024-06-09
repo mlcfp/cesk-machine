@@ -94,6 +94,7 @@ test-suite cesk-machine-test
   main-is: Test.hs
   other-modules:
       TestANF
+      TestCESK
       Paths_cesk_machine
   autogen-modules:
       Paths_cesk_machine

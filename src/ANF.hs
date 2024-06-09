@@ -13,7 +13,8 @@ module ANF
   , Var(..)
   , anfExp
   , anfProg
-  , runTest
+  , runTestExp
+  , runTestProg
   ) where
 
 import Control.Monad (void)
@@ -46,9 +47,19 @@ import qualified Text.Megaparsec.Char.Lexer as L
 --  prim ::= +  |  -  |  *  |  =
 
 
-newtype Var = Var Text deriving (Eq, Ord, Show)
+newtype Prog = Prog [Dec] deriving (Eq, Ord, Show)
 
-data Lam = Lam [Var] Exp deriving (Eq, Ord, Show)
+data Dec
+  = DecDefine Var Exp -- in ANF the exp can only be a Lam
+  -- | DecBegin [Dec] -- do we want this?
+  | DecExp Exp
+  deriving (Eq, Ord, Show)
+
+data Exp
+  = ExpAtomic AExp
+  | ExpComplex CExp
+  | ExpLet Var Exp Exp
+  deriving (Eq, Ord, Show)
 
 data AExp
   = AExpLam Lam
@@ -67,11 +78,9 @@ data CExp
   | CExpLetRec [(Var, AExp)] Exp
   deriving (Eq, Ord, Show)
 
-data Exp
-  = ExpAtomic AExp
-  | ExpComplex CExp
-  | ExpLet Var Exp Exp
-  deriving (Eq, Ord, Show)
+newtype Var = Var Text deriving (Eq, Ord, Show)
+
+data Lam = Lam [Var] Exp deriving (Eq, Ord, Show)
 
 data Prim
   = PrimAdd
@@ -80,14 +89,6 @@ data Prim
   | PrimDiv
   | PrimEq
   deriving (Eq, Ord, Show)
-
-data Dec
-  = DecDefine Var Exp
-  -- | DecBegin [Dec] -- do we want this?
-  | DecExp Exp
-  deriving (Eq, Ord, Show)
-
-data Prog = Prog [Dec] deriving (Eq, Ord, Show)
 
 type Parser = Parsec Void Text
 
@@ -245,5 +246,8 @@ anfProg = runParser parseProg ""
 -- parseANF :: Text -> Either (ParseErrorBundle Text Void) ()
 -- parseANF = runParser parseANFTest ""
 
-runTest :: Text -> IO ()
-runTest  = parseTest parseExp
+runTestExp :: Text -> IO ()
+runTestExp  = parseTest parseExp
+
+runTestProg :: Text -> IO ()
+runTestProg  = parseTest parseProg
