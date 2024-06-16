@@ -9,6 +9,7 @@ module Main
 import ANF
 import qualified CESK as CESK
 import Data.Either (fromRight)
+import qualified Data.Text as T
 import Data.Time.Clock (diffUTCTime, getCurrentTime)
 import Text.RawString.QQ
 
@@ -34,12 +35,13 @@ main = do
   -- putStrLn $ show a
   -- runTestProg "(define (y 1)) y"
   -- runTestProg "(define y (λ (n) (* 2 n))) (y 4)"
-  let x = anfProg [r|
+  let e = CESK.run [r|
     (define y (λ (n) (* 2 n)))
     (define g (λ (x) (+ x 1)))
     (define sqr (λ (a) (* a a)))
-    ;(sqr 2)
     (sqr 2)
+    ;(sqr 2,)
   |]
-  let e = CESK.run $ fromRight (error "") x
-  putStrLn $ show e
+  case e of
+    Left err -> putStrLn $ T.unpack err
+    Right v -> putStrLn $ show v

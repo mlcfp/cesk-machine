@@ -11,13 +11,12 @@ module ANF
   , Prim(..)
   , Prog(..)
   , Var(..)
-  , anfExp
-  , anfProg
-  , runTestExp
-  , runTestProg
+  , anfParseExp
+  , anfParseProg
   ) where
 
 import Control.Monad (void)
+import Data.Either.Combinators (mapLeft)
 import Data.Functor (($>))
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -26,25 +25,32 @@ import Text.Megaparsec
 import Text.Megaparsec.Char
 import qualified Text.Megaparsec.Char.Lexer as L
 
+--
+-- <prog> ::= <dec> ...
+--
+-- <dec> ::=  (define <var> <exp>)
+--         |  (begin <dec> ...)
+--         |  <exp>
+--
 -- lam ::= (λ (var1 ... varN) exp)
-
---  aexp ::= lam
+--
+-- aexp ::=  lam
 --        |  var
 --        |  #t  |  #f
 --        |  integer
 --        |  (prim aexp1 ... aexpN)
-
---  cexp ::= (aexp0 aexp1 ... aexpN)
+--
+-- cexp ::=  (aexp0 aexp1 ... aexpN)
 --        |  (if aexp exp exp)
 --        |  (call/cc aexp)
 --        |  (set! var aexp)
 --        |  (letrec ((var1 aexp1) ... (varN aexpN)) exp)
-
---  exp ::= aexp
+--
+-- exp ::=  aexp
 --       |  cexp
 --       |  (let ((var exp)) exp)
-
---  prim ::= +  |  -  |  *  |  =
+--
+--  prim ::=  +  |  -  |  *  |  =
 
 
 newtype Prog = Prog [Dec] deriving (Eq, Ord, Show)
@@ -227,27 +233,27 @@ parens = between (symbol "(") (symbol ")")
 -- stringLiteral :: Parser String
 -- stringLiteral = char '\"' *> manyTill L.charLiteral (char '\"')
 
--- integer :: Parser Integer
--- integer = lexeme L.decimal
-
 -- float :: Parser Double
 -- float = lexeme L.float
 
 
-anfExp :: Text -> Either (ParseErrorBundle Text Void) Exp
-anfExp = runParser parseExp ""
+runExpParser :: Text -> Either (ParseErrorBundle Text Void) Exp
+runExpParser = runParser parseExp ""
 
-anfProg :: Text -> Either (ParseErrorBundle Text Void) Prog
-anfProg = runParser parseProg ""
+runProgParser :: Text -> Either (ParseErrorBundle Text Void) Prog
+runProgParser = runParser parseProg ""
 
--- parseANF :: Text -> Either (ParseErrorBundle Text Void) Var
--- parseANF :: Text -> Either (ParseErrorBundle Text Void) (Var, Int, Var)
--- parseANF :: Text -> Either (ParseErrorBundle Text Void) (Var, Int)
--- parseANF :: Text -> Either (ParseErrorBundle Text Void) ()
--- parseANF = runParser parseANFTest ""
+renderError :: ParseErrorBundle Text Void -> Text
+renderError = T.pack . errorBundlePretty
 
-runTestExp :: Text -> IO ()
-runTestExp  = parseTest parseExp
+anfParseExp :: Text -> Either Text Exp
+anfParseExp = mapLeft renderError . runExpParser
 
-runTestProg :: Text -> IO ()
-runTestProg  = parseTest parseProg
+anfParseProg :: Text -> Either Text Prog
+anfParseProg = mapLeft renderError . runProgParser
+
+testExp :: Text -> IO ()
+testExp  = parseTest parseExp
+
+testProg :: Text -> IO ()
+testProg  = parseTest parseProg

@@ -43,7 +43,7 @@ dependencies:
 # - bytestring
 - containers
 - data-default
-# - extra
+- either
 - megaparsec
 # - mtl
 - raw-strings-qq

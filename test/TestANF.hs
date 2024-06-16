@@ -27,66 +27,66 @@ testParseInt :: Test
 testParseInt = testCase "int" $ do
   assertEqual "int small"
     (Right $ ExpAtomic $ AExpInt 6)
-    (anfExp "6")
+    (anfParseExp "6")
   assertEqual "int large"
     (Right $ ExpAtomic $ AExpInt 1234567890)
-    (anfExp "1234567890")
+    (anfParseExp "1234567890")
 
 testParseBool :: Test
 testParseBool = testCase "bool" $ do
   assertEqual "bool true"
     (Right $ ExpAtomic AExpTrue)
-    (anfExp "#t")
+    (anfParseExp "#t")
   assertEqual "bool false"
     (Right $ ExpAtomic AExpFalse)
-    (anfExp "#f")
+    (anfParseExp "#f")
 
 testParseVar :: Test
 testParseVar = testCase "var" $ do
   assertEqual "var letter"
     (Right $ ExpAtomic $ AExpVar $ Var "x")
-    (anfExp "x")
+    (anfParseExp "x")
   assertEqual "var alphanum"
     (Right $ ExpAtomic $ AExpVar $ Var "x01")
-    (anfExp "x01")
+    (anfParseExp "x01")
   -- assertEqual "var complex"
   --   (Right $ ExpAtomic $ AExpVar $ Var "yy2_89nn")
-  --   (anfExp "yy2_89nn")
+  --   (anfParseExp "yy2_89nn")
 
 testParsePrim :: Test
 testParsePrim = testCase "prim" $ do
   assertEqual "prim add"
     (Right $ ExpAtomic $ AExpPrim PrimAdd [AExpInt 1, AExpInt 2])
-    (anfExp "(+ 1 2)")
+    (anfParseExp "(+ 1 2)")
   assertEqual "prim sub"
     (Right $ ExpAtomic $ AExpPrim PrimSub [AExpInt 44, AExpInt 3])
-    (anfExp "(- 44 3)")
+    (anfParseExp "(- 44 3)")
   assertEqual "prim mul"
     (Right $ ExpAtomic $ AExpPrim PrimMul [AExpInt 66, AExpInt 88])
-    (anfExp "(* 66 88)")
+    (anfParseExp "(* 66 88)")
   assertEqual "prim div"
     (Right $ ExpAtomic $ AExpPrim PrimDiv [AExpInt 0, AExpInt 2])
-    (anfExp "(/ 0 2)")
+    (anfParseExp "(/ 0 2)")
   assertEqual "prim eq"
     (Right $ ExpAtomic $ AExpPrim PrimEq [AExpInt 0, AExpInt 2])
-    (anfExp "(= 0 2)")
+    (anfParseExp "(= 0 2)")
 
 testParseLam :: Test
 testParseLam = testCase "lam" $ do
   assertEqual "lam basic"
     (Right $ ExpAtomic $ AExpLam (Lam [Var "n"] (ExpAtomic $ AExpInt 0)))
-    (anfExp "(λ (n) 0)")
+    (anfParseExp "(λ (n) 0)")
   assertEqual "lam multivar"
     (Right $ ExpAtomic $ AExpLam (Lam [Var "n", Var "x", Var "y", Var "ggg"]
       (ExpAtomic AExpFalse)))
-    (anfExp "(λ (n x y ggg) #f)")
+    (anfParseExp "(λ (n x y ggg) #f)")
 
 testParseLet :: Test
 testParseLet = testCase "let" $ do
   assertEqual "prim add"
     (Right $ (ExpLet (Var "x") (ExpAtomic (AExpInt 1))
       (ExpAtomic (AExpVar (Var "x")))))
-    (anfExp "(let ((x 1)) x)")
+    (anfParseExp "(let ((x 1)) x)")
 
 testProgFactorial :: Test
 testProgFactorial = testCase "factorial" $ do
@@ -120,7 +120,7 @@ testProgFactorial = testCase "factorial" $ do
           , AExpInt 20
           ])
       ])
-    $ anfProg [r|
+    $ anfParseProg [r|
       #|
       factorial
       |#

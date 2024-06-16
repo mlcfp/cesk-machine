@@ -9,9 +9,11 @@ module Main
 import Test.Framework
 import qualified TestANF
 import qualified TestCESK
+import qualified TestGC
 
 main :: IO ()
 main = defaultMain
   [ TestANF.tests
   , TestCESK.tests
+  , TestGC.tests
   ]

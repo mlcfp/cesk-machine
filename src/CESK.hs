@@ -4,23 +4,63 @@
 
 module CESK
   ( Addr(..)
+  , AddrSupply
   , Cont(..)
   , Env(..)
+  , State(..)
+  , Store(..)
+  , StoreColor(..)
+  , StoreItem(..)
+  , StoreSpace
   , Val(..)
+  , envEmpty
+  , garbageCollect
   , run
+  , runProg
+  , stateSpace
+  , storeEmpty
+  , storeAlloc
+  , storeFree
+  , storeUpdate
+  , storeUpdateItem
+  , storeVal
+  , storeItem
   ) where
 
+import Prelude hiding (exp)
 import ANF
+import Data.Either.Combinators (mapRight)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Maybe (fromJust, fromMaybe)
+import Data.Text (Text)
 import Debug.Trace (trace)
 
 newtype Addr = Addr Integer deriving (Eq, Ord, Show)
 
 type Env = Map Var Addr
 
-type Store = Map Addr Val
+data Store = Store
+  { storeSpace  :: StoreSpace
+  , storeSupply :: AddrSupply
+  , storeSize   :: Int
+  }
+
+type AddrSupply = [Addr]
+
+type StoreSpace = Map Addr StoreItem
+
+data StoreItem
+  = StoreVal StoreColor Val
+  | StoreForward Addr
+    deriving (Eq, Ord, Show)
+
+data StoreColor
+  = StoreWhite
+  | StoreBlack
+  | StoreGray
+    deriving (Eq, Ord, Show)
+
 
 data Cont
   = Cont Var Exp Env Cont
@@ -35,25 +75,31 @@ data Val
   | ValCont Cont
     deriving (Eq, Ord, Show)
 
-data State = State Exp Env Store Cont deriving (Show)
+data State = State Exp Env Store Cont
 
-run :: Prog -> Val
-run prog =
-  case evalProg (inject prog) of
+stateSpace :: State -> StoreSpace
+stateSpace (State _ _ (Store space _ _) _) = space
+
+run :: Text -> Either Text Val
+run = mapRight runProg . anfParseProg
+
+runProg :: Prog -> Val
+runProg prog =
+  case x of
     State (ExpAtomic aexp) env store _ ->
       evalAtomic env store aexp
+  where
+    finalState = evalProg (inject prog)
+
+    -- TODO move garbage collect into eval on some interval
+    (_, x) = garbageCollect finalState
 
 evalProg :: State -> State
-evalProg state@(State (ExpAtomic _) _ _ Halt) =
-  state
-  -- trace ("state: " <> show state) $ state
+evalProg state@(State (ExpAtomic _) _ _ Halt) = state
 evalProg state = evalProg $ step state
 
 envEmpty :: Env
 envEmpty = Map.empty
-
-storeEmpty :: Store
-storeEmpty = Map.empty
 
 inject :: Prog -> State
 inject (Prog decs) =
@@ -101,11 +147,9 @@ evalAtomic env store = \case
   AExpLam lam -> ValClos lam env
   AExpVar var ->
     let
-      -- v = Map.lookup var env
-      -- addr = fromJust $ trace ("var: " <> show var <> " v: " <> show v <> " env: " <> show env) v
       addr = fromJust $ Map.lookup var env
     in
-      fromJust $ Map.lookup addr store
+      storeVal store addr
   AExpPrim PrimAdd [aexp1, aexp2] -> evalBinary (+) aexp1 aexp2
   AExpPrim PrimSub [aexp1, aexp2] -> evalBinary (-) aexp1 aexp2
   AExpPrim PrimMul [aexp1, aexp2] -> evalBinary (*) aexp1 aexp2
@@ -162,7 +206,7 @@ step (State exp env store cont) = case exp of
         let
           addr = fromJust $ Map.lookup var env
           val = evalAtomic env store aexp
-          store' = Map.insert addr val store
+          store' = storeUpdate store addr val
         in
           applyCont cont ValVoid store'
       CExpLetRec bindings body ->
@@ -171,7 +215,7 @@ step (State exp env store cont) = case exp of
           (env', store') = storeMap vars vals env store
           vals' = map (\(_, aexp) -> evalAtomic env' store' aexp) bindings
           addrs = map (\var -> fromJust $ Map.lookup var env') vars
-          store'' = Map.union (Map.fromList $ zip addrs vals') store'
+          store'' = foldl (\s (a, v) -> storeUpdate s a v) store' $ zip addrs vals'
         in
           State body env' store'' cont
 
@@ -205,16 +249,149 @@ storeMap (var:vars) (val:vals) env store =
 
 storeAdd :: Var -> Val -> Env -> Store -> (Env, Store)
 storeAdd var val env store =
-  (env', store'')
+  (env', store')
   where
-    (store', addr) = newAddr store
-    store'' = Map.insert addr val store'
+    (store', addr) = storeAlloc store val StoreWhite
     env' = Map.insert var addr env
 
-newAddr :: Store -> (Store, Addr)
-newAddr store =
-  (store', Addr a')
+storeEmpty :: Store
+storeEmpty = Store
+  { storeSpace  = Map.empty
+  , storeSupply = map Addr [1..]
+  , storeSize   = 0
+  }
+
+storeAlloc :: Store -> Val -> StoreColor -> (Store, Addr)
+storeAlloc (Store _ [] _) _ _ =
+  error "you've reached the end of the multiverse"
+storeAlloc (Store space (addr:supply) size) val color =
+  ( Store
+    { storeSpace  = Map.insert addr (StoreVal color val) space
+    , storeSupply = supply
+    , storeSize   = size + 1
+    }
+  , addr
+  )
+
+storeFree :: Store -> Addr -> Store
+storeFree (Store space supply size) addr =
+  Store (Map.delete addr space) supply (size - 1)
+
+storeUpdate :: Store -> Addr -> Val -> Store
+storeUpdate store addr val =
+  storeUpdateItem store addr $ StoreVal StoreWhite val
+
+storeUpdateItem :: Store -> Addr -> StoreItem -> Store
+storeUpdateItem (Store space supply size) addr item =
+  Store (Map.insert addr item space) supply size
+
+storeVal :: Store -> Addr -> Val
+storeVal store addr =
+  case storeItem store addr of
+    StoreVal _ val -> val
+    StoreForward _ -> error "bad store value"
+
+storeItem :: Store -> Addr -> StoreItem
+storeItem Store{..} addr = fromJust $ Map.lookup addr storeSpace
+
+garbageCollect :: State -> (State, State)
+garbageCollect state =
+  trace ("orig: " <> showSize state <> " new: " <> showSize stateTo''
+    <> " new state: " <> showSpace stateTo'') $
+  (stateFrom', stateTo'')
   where
-    ValInt a = fromMaybe (ValInt 0) $ Map.lookup (Addr 0) store
-    a' = a + 1
-    store' = Map.insert (Addr 0) (ValInt a') store
+    (stateFrom, stateTo) = trace ("evac") $ evacuateState state
+    (stateFrom', stateTo') = trace ("scav") $ scavengeState stateFrom stateTo
+    stateTo'' = recolor StoreWhite stateTo'
+
+    -- DEBUG code
+    showSize (State _ _ store _) = show $ storeSize store
+    showSpace (State _ _ store _) = show $ storeSpace store
+
+recolor :: StoreColor -> State -> State
+recolor color (State exp env (Store space supply size) cont) =
+  (State exp env (Store space' supply size) cont)
+  where
+    space' = Map.map colorItem space
+    colorItem = \case
+      StoreVal StoreBlack val -> StoreVal color val
+      StoreVal badColor _ -> error $ "bad color " <> show badColor
+      StoreForward _ -> error "forward found while recoloring"
+
+evacuateState :: State -> (State, State)
+evacuateState (State exp env store cont) =
+  (State exp env from'' cont', State exp env' to'' cont')
+  where
+    (env', from', to') = evacuateEnv env store storeEmpty
+    (cont', from'', to'') = evacuateCont cont from' to'
+
+evacuateCont :: Cont -> Store -> Store -> (Cont, Store, Store)
+evacuateCont = go
+  where
+    -- go :: Cont -> Store -> Store -> (Cont, Store, Store)
+    go Halt storeFrom storeTo =
+      (Halt, storeFrom, storeTo)
+    go (Cont var exp env cont) storeFrom storeTo =
+      let
+        (env', from0, to0) = evacuateEnv env storeFrom storeTo
+        (cont', from', to') = go cont from0 to0
+      in
+        (Cont var exp env' cont', from', to')
+
+evacuateEnv :: Env -> Store -> Store -> (Env, Store, Store)
+evacuateEnv env =
+  go (Map.toAscList env) env
+  where
+    go [] env' from to =
+      (env', from, to)
+    go ((var, addr):vars) env' from to =
+      case storeItem from addr of
+        StoreVal _ val ->
+          let
+            (to', addr') = storeAlloc to val StoreGray
+            from' = storeUpdateItem from addr $ StoreForward addr'
+          in
+            go vars (Map.insert var addr' env') from' to'
+        StoreForward addr' ->
+            go vars (Map.insert var addr' env') from to
+
+scavengeState :: State -> State -> (State, State)
+scavengeState stateFrom stateTo =
+  ( State exp0 env0 store0' cont0
+  , State exp1 env1 store1' cont1
+  )
+  where
+    (State exp0 env0 store0 cont0) = stateFrom
+    (State exp1 env1 store1 cont1) = stateTo
+    (store0', store1') = scavenge store0 store1
+
+scavenge :: Store -> Store -> (Store, Store)
+scavenge storeFrom storeTo =
+  trace ("scav from: " <> show (storeSpace storeFrom) <> " scav to: " <> show (storeSpace storeTo)) $
+  case grayItem of
+    Just (addr, StoreVal _ (ValClos lam env)) ->
+      let
+        (env', from', to') = evacuateEnv env storeFrom storeTo
+        to'' = storeUpdateItem to' addr $ StoreVal StoreBlack $ ValClos lam env'
+      in
+        scavenge from' to''
+    Just (addr, StoreVal _ (ValCont cont)) ->
+      let
+        (cont', from', to') = evacuateCont cont storeFrom storeTo
+        to'' = storeUpdateItem to' addr $ StoreVal StoreBlack $ ValCont cont'
+      in
+        scavenge from' to''
+    Just (addr, StoreVal _ val) ->
+      let
+        to' = storeUpdateItem storeTo addr $ StoreVal StoreBlack val
+      in
+        scavenge storeFrom to'
+    Just (_, StoreForward _) ->
+      error "forward found while scavenging"
+    Nothing ->
+      (storeFrom, storeTo)
+  where
+    isGray (StoreVal StoreGray _) = True
+    isGray _ = False
+    (grayMap, _) = Map.partition isGray $ storeSpace storeTo
+    grayItem = Map.lookupMin grayMap

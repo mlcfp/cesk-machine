@@ -24,57 +24,57 @@ tests = testGroup "CESK"
 
 testVal :: Test
 testVal = testCase "val" $ do
-  assertEqual "int" (Right $ ValInt 0) (run <$> anfProg "0")
-  assertEqual "true" (Right $ ValBool True) (run <$> anfProg "#t")
-  assertEqual "false" (Right $ ValBool False) (run <$> anfProg "#f")
+  assertEqual "int" (Right $ ValInt 0) (run "0")
+  assertEqual "true" (Right $ ValBool True) (run "#t")
+  assertEqual "false" (Right $ ValBool False) (run "#f")
 
 testVar :: Test
 testVar = testCase "var" $ do
   assertEqual "var 1"
     (Right $ ValInt 1)
-    (run <$> anfProg "(letrec (( y  1 )) y )")
+    (run "(letrec (( y  1 )) y )")
   assertEqual "var 2"
     (Right $ ValBool True)
-    (run <$> anfProg "(letrec((y #t))y)")
+    (run "(letrec((y #t))y)")
   assertEqual "var 3"
     (Right $ ValInt 1)
-    (run <$> anfProg "(let ((y 1)) y)")
+    (run "(let ((y 1)) y)")
   assertEqual "var 4"
     (Right $ ValInt 16)
-    (run <$> anfProg "(let ((y 8)) (* 2 y))")
+    (run "(let ((y 8)) (* 2 y))")
 
 testMath :: Test
 testMath = testCase "math" $ do
   assertEqual "add"
     (Right $ ValInt 854)
-    (run <$> anfProg "(+ 66 788)")
+    (run "(+ 66 788)")
   assertEqual "sub"
     (Right $ ValInt (-722))
-    (run <$> anfProg "(- 66 788)")
+    (run "(- 66 788)")
   assertEqual "mul"
     (Right $ ValInt 36)
-    (run <$> anfProg "(* 6 6)")
+    (run "(* 6 6)")
   assertEqual "div"
     (Right $ ValInt 2)
-    (run <$> anfProg "(/ 6 3)")
+    (run "(/ 6 3)")
   assertEqual "div"
     (Right $ ValInt 0)
-    (run <$> anfProg "(/ 6 7)")
+    (run "(/ 6 7)")
   assertEqual "complex 1"
     (Right $ ValInt 6)
-    (run <$> anfProg "(* (+ 1 (- 3 2)) 3)")
+    (run "(* (+ 1 (- 3 2)) 3)")
 
 testDefine :: Test
 testDefine = testCase "define" $ do
   assertEqual "define 1"
     (Right $ ValInt 1)
-    (run <$> anfProg "(define y 1) y")
+    (run "(define y 1) y")
   assertEqual "define 2"
     (Right $ ValInt 8)
-    (run <$> anfProg "(define y (λ (n) (* 2 n))) (y 4)")
+    (run "(define y (λ (n) (* 2 n))) (y 4)")
   assertEqual "define 3"
     (Right $ ValInt 16)
-    (run <$> anfProg [r|
+    (run [r|
       (define y (λ (n) (* 2 n)))
       (define g (λ (x) (+ x 1)))
       (define sqr (λ (a) (* a a)))
@@ -87,7 +87,7 @@ testProgFactorial :: Test
 testProgFactorial = testCase "factorial" $ do
   assertEqual "ver 1"
     (Right $ ValInt 2432902008176640000)
-    (run <$> anfProg [r|
+    (run [r|
       #| factorial version 1 |#
       (letrec ((f
         (λ (n)
@@ -101,7 +101,7 @@ testProgFactorial = testCase "factorial" $ do
       (f 20))|])
   assertEqual "ver 2"
     (Right $ ValInt 720)
-    (run <$> anfProg [r|
+    (run [r|
       (define factorial (λ (x)
         (letrec ((f
           (λ (n)
