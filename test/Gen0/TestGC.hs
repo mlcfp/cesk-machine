@@ -2,17 +2,16 @@
 -- Copyright 2024 Michael P Williams. All rights reserved.
 --------------------------------------------------------------------------------
 
-module TestGC
+module Gen0.TestGC
   ( tests
   ) where
 
-import ANF
-import CESK
+import Gen0.ANF
+import Gen0.CESK
 import qualified Data.Map as Map
 import Test.Framework (Test, testGroup)
 import Test.Framework.Providers.HUnit (testCase)
-import Test.HUnit (assertEqual, assertFailure)
-import Text.RawString.QQ
+import Test.HUnit (assertEqual)
 
 tests :: Test
 tests = testGroup "GC"

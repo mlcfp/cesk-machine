@@ -2,11 +2,11 @@
 -- Copyright 2024 Michael P Williams. All rights reserved.
 --------------------------------------------------------------------------------
 
-module CESK
+module Gen0.CESK
   ( Addr(..)
   , AddrSupply
   , Cont(..)
-  , Env(..)
+  , Env
   , State(..)
   , Store(..)
   , StoreColor(..)
@@ -28,45 +28,51 @@ module CESK
   ) where
 
 import Prelude hiding (exp)
-import ANF
 import Data.Either.Combinators (mapRight)
 import Data.Map (Map)
 import qualified Data.Map as Map
-import Data.Maybe (fromJust, fromMaybe)
+import Data.Maybe (fromJust)
 import Data.Text (Text)
-import Debug.Trace (trace)
+-- import Debug.Trace (trace)
+import Gen0.ANF
 
+-- | Defines an address in the store.
 newtype Addr = Addr Integer deriving (Eq, Ord, Show)
 
+-- | Defines an environment, which is a map of variables
+-- to addresses in the store.
 type Env = Map Var Addr
 
+-- | Defines a store.
 data Store = Store
   { storeSpace  :: StoreSpace
   , storeSupply :: AddrSupply
   , storeSize   :: Int
   }
 
+-- | Defines a supply of addresses.
 type AddrSupply = [Addr]
 
+-- | Defines the address space in the store.
 type StoreSpace = Map Addr StoreItem
 
+-- | Defines an item in the store.
 data StoreItem
   = StoreVal StoreColor Val
   | StoreForward Addr
     deriving (Eq, Ord, Show)
 
+-- | Defines the garbage collection state for a value in the store.
 data StoreColor
   = StoreWhite
   | StoreBlack
   | StoreGray
     deriving (Eq, Ord, Show)
 
+-- | Defines a continuation.
+data Cont = Cont Var Exp Env Cont | Halt deriving (Eq, Ord, Show)
 
-data Cont
-  = Cont Var Exp Env Cont
-  | Halt
-    deriving (Eq, Ord, Show)
-
+-- | Defines a value.
 data Val
   = ValVoid
   | ValInt Integer
@@ -75,8 +81,10 @@ data Val
   | ValCont Cont
     deriving (Eq, Ord, Show)
 
+-- | Defines a machine state.
 data State = State Exp Env Store Cont
 
+-- | Returns the store space for a state.
 stateSpace :: State -> StoreSpace
 stateSpace (State _ _ (Store space _ _) _) = space
 
@@ -88,6 +96,8 @@ runProg prog =
   case x of
     State (ExpAtomic aexp) env store _ ->
       evalAtomic env store aexp
+    _otherwise ->
+      error "non-atomic result"
   where
     finalState = evalProg (inject prog)
 
@@ -98,6 +108,7 @@ evalProg :: State -> State
 evalProg state@(State (ExpAtomic _) _ _ Halt) = state
 evalProg state = evalProg $ step state
 
+-- | Defines an empty environment.
 envEmpty :: Env
 envEmpty = Map.empty
 
@@ -105,40 +116,40 @@ inject :: Prog -> State
 inject (Prog decs) =
   case [exp | DecExp exp <- decs] of
     (exp:[]) -> State exp env' store' Halt
-    (exp:_) -> error "too many top level expressions"
+    (_:_) -> error "too many top level expressions"
     [] -> error "top level expression missing"
   where
     (env', store') = envInit decs envEmpty storeEmpty
 
-    envInit :: [Dec] -> Env -> Store -> (Env, Store)
-    envInit [] env store =
-      (env, store)
-    envInit ((DecExp _):decs) env store =
-      envInit decs env store
-    envInit ((DecDefine var (ExpAtomic (AExpLam lam))):decs) env store =
-      let
-        (e', s') = storeAdd var (ValClos lam envEmpty) env store
-      in
-        envInit decs e' s'
-    envInit ((DecDefine var (ExpAtomic AExpTrue)):decs) env store =
-      let
-        (e', s') = storeAdd var (ValBool True) env store
-      in
-        envInit decs e' s'
-    envInit ((DecDefine var (ExpAtomic AExpFalse)):decs) env store =
-      let
-        (e', s') = storeAdd var (ValBool False) env store
-      in
-        envInit decs e' s'
-    envInit ((DecDefine var (ExpAtomic (AExpInt i))):decs) env store =
-      let
-        (e', s') = storeAdd var (ValInt i) env store
-      in
-        envInit decs e' s'
-    envInit ((DecDefine _ _):_) env store =
-      error "only lambda or constants allowed in definitions"
+envInit :: [Dec] -> Env -> Store -> (Env, Store)
+envInit [] env store =
+  (env, store)
+envInit ((DecExp _):decs) env store =
+  envInit decs env store
+envInit ((DecDefine var (ExpAtomic (AExpLam lam))):decs) env store =
+  let
+    (e', s') = storeAdd var (ValClos lam envEmpty) env store
+  in
+    envInit decs e' s'
+envInit ((DecDefine var (ExpAtomic AExpTrue)):decs) env store =
+  let
+    (e', s') = storeAdd var (ValBool True) env store
+  in
+    envInit decs e' s'
+envInit ((DecDefine var (ExpAtomic AExpFalse)):decs) env store =
+  let
+    (e', s') = storeAdd var (ValBool False) env store
+  in
+    envInit decs e' s'
+envInit ((DecDefine var (ExpAtomic (AExpInt i))):decs) env store =
+  let
+    (e', s') = storeAdd var (ValInt i) env store
+  in
+    envInit decs e' s'
+envInit ((DecDefine _ _):_) _ _ =
+  error "only lambda or constants allowed in definitions"
 
-
+-- | Evaluates an atomic expression.
 evalAtomic :: Env -> Store -> AExp -> Val
 evalAtomic env store = \case
   AExpInt x -> ValInt x
@@ -174,51 +185,51 @@ evalAtomic env store = \case
     in
       ValBool $ f x y
 
+-- | Steps the machine from a given state to the next.
 step :: State -> State
 step (State exp env store cont) = case exp of
   ExpLet var exp0 exp1 ->
     State exp0 env store $ Cont var exp1 env cont
   ExpAtomic aexp ->
     applyCont cont (evalAtomic env store aexp) store
-  ExpComplex cexp ->
-    case cexp of
-      CExpApp aexps ->
-        case aexps of
-          (arg0:arg1:args) ->
-            let
-              proc = evalAtomic env store arg0
-              vals = evalAtomic env store <$> (arg1:args)
-            in
-              applyProc proc vals store cont
-          _otherwise -> error "bad application"
-      CExpIf aexp exp0 exp1 ->
-        case evalAtomic env store aexp of
-          ValBool True -> State exp0 env store cont
-          ValBool False -> State exp1 env store cont
-          _otherwise -> error "bad if expression"
-      CExpCallCC aexp ->
+  ExpComplex (CExpApp aexps) ->
+    case aexps of
+      (arg0:arg1:args) ->
         let
-          proc = evalAtomic env store aexp
-          valcc = ValCont cont
+          proc = evalAtomic env store arg0
+          vals = evalAtomic env store <$> (arg1:args)
         in
-          applyProc proc [valcc] store cont
-      CExpSet var aexp ->
-        let
-          addr = fromJust $ Map.lookup var env
-          val = evalAtomic env store aexp
-          store' = storeUpdate store addr val
-        in
-          applyCont cont ValVoid store'
-      CExpLetRec bindings body ->
-        let
-          (vars, vals) = unzip $ map (\(var, aexp) -> (var, ValVoid)) bindings
-          (env', store') = storeMap vars vals env store
-          vals' = map (\(_, aexp) -> evalAtomic env' store' aexp) bindings
-          addrs = map (\var -> fromJust $ Map.lookup var env') vars
-          store'' = foldl (\s (a, v) -> storeUpdate s a v) store' $ zip addrs vals'
-        in
-          State body env' store'' cont
+          applyProc proc vals store cont
+      _otherwise -> error "bad application"
+  ExpComplex (CExpIf aexp exp0 exp1) ->
+    case evalAtomic env store aexp of
+      ValBool True -> State exp0 env store cont
+      ValBool False -> State exp1 env store cont
+      _otherwise -> error "bad if expression"
+  ExpComplex (CExpCallCC aexp) ->
+    let
+      proc = evalAtomic env store aexp
+      valcc = ValCont cont
+    in
+      applyProc proc [valcc] store cont
+  ExpComplex (CExpSet var aexp) ->
+    let
+      addr = fromJust $ Map.lookup var env
+      val = evalAtomic env store aexp
+      store' = storeUpdate store addr val
+    in
+      applyCont cont ValVoid store'
+  ExpComplex (CExpLetRec bindings body) ->
+    let
+      (vars, vals) = unzip $ map (\(var, _) -> (var, ValVoid)) bindings
+      (env', store') = storeMap vars vals env store
+      vals' = map (\(_, aexp) -> evalAtomic env' store' aexp) bindings
+      addrs = map (\var -> fromJust $ Map.lookup var env') vars
+      store'' = foldl (\s (a, v) -> storeUpdate s a v) store' $ zip addrs vals'
+    in
+      State body env' store'' cont
 
+-- | Applies a procedure.
 applyProc :: Val -> [Val] -> Store -> Cont -> State
 applyProc proc vals store cont =
   case proc of
@@ -230,6 +241,7 @@ applyProc proc vals store cont =
     _otherwise ->
       error "not a proc"
 
+-- | Applies a continuation.
 applyCont :: Cont -> Val -> Store -> State
 applyCont (Cont var exp env cont) val store =
   State exp env' store' cont
@@ -238,15 +250,18 @@ applyCont (Cont var exp env cont) val store =
 applyCont Halt _ _ =
   error "cannot apply halt"
 
+-- | Defines a set of variables and corresponding values by allocating
+-- the value in the store and defining the variable in the environment.
 storeMap :: [Var] -> [Val] -> Env -> Store -> (Env, Store)
-storeMap (var:vars) [] _ _ = error "missing vals"
-storeMap [] (val:vals) _ _ = error "missing vars"
+storeMap (_:_) [] _ _ = error "missing vals"
+storeMap [] (_:_) _ _ = error "missing vars"
 storeMap [] [] env store = (env, store)
 storeMap (var:vars) (val:vals) env store =
   storeMap vars vals env' store'
   where
   (env', store') = storeAdd var val env store
 
+-- | Adds a variable and its value to the machine state.
 storeAdd :: Var -> Val -> Env -> Store -> (Env, Store)
 storeAdd var val env store =
   (env', store')
@@ -254,6 +269,7 @@ storeAdd var val env store =
     (store', addr) = storeAlloc store val StoreWhite
     env' = Map.insert var addr env
 
+-- | Defines an empty store.
 storeEmpty :: Store
 storeEmpty = Store
   { storeSpace  = Map.empty
@@ -261,6 +277,7 @@ storeEmpty = Store
   , storeSize   = 0
   }
 
+-- | Allocates a value in the store and returns its address.
 storeAlloc :: Store -> Val -> StoreColor -> (Store, Addr)
 storeAlloc (Store _ [] _) _ _ =
   error "you've reached the end of the multiverse"
@@ -273,41 +290,46 @@ storeAlloc (Store space (addr:supply) size) val color =
   , addr
   )
 
+-- | Frees a value from the store.
 storeFree :: Store -> Addr -> Store
 storeFree (Store space supply size) addr =
   Store (Map.delete addr space) supply (size - 1)
 
+-- | Updates the value at an address in a store.
 storeUpdate :: Store -> Addr -> Val -> Store
 storeUpdate store addr val =
   storeUpdateItem store addr $ StoreVal StoreWhite val
 
+-- | Updates a store item at an address in a store.
 storeUpdateItem :: Store -> Addr -> StoreItem -> Store
 storeUpdateItem (Store space supply size) addr item =
   Store (Map.insert addr item space) supply size
 
+-- | Gets a value from a store.
 storeVal :: Store -> Addr -> Val
 storeVal store addr =
   case storeItem store addr of
     StoreVal _ val -> val
     StoreForward _ -> error "bad store value"
 
+-- | Gets an item from a store.
 storeItem :: Store -> Addr -> StoreItem
 storeItem Store{..} addr = fromJust $ Map.lookup addr storeSpace
 
+-- | Performs garbage collection on a state.
+-- Returns a tuple of the modified old state (for testing purposes) and
+-- the new, resulting state respectively.
 garbageCollect :: State -> (State, State)
 garbageCollect state =
-  trace ("orig: " <> showSize state <> " new: " <> showSize stateTo''
-    <> " new state: " <> showSpace stateTo'') $
   (stateFrom', stateTo'')
   where
-    (stateFrom, stateTo) = trace ("evac") $ evacuateState state
-    (stateFrom', stateTo') = trace ("scav") $ scavengeState stateFrom stateTo
+    (stateFrom, stateTo) = evacuateState state
+    (stateFrom', stateTo') = scavengeState stateFrom stateTo
     stateTo'' = recolor StoreWhite stateTo'
 
-    -- DEBUG code
-    showSize (State _ _ store _) = show $ storeSize store
-    showSpace (State _ _ store _) = show $ storeSpace store
-
+-- | Changes the collection color of a state.
+-- The supplied state is expected to be all black at this point,
+-- so recolor also acts as a validator of this requirement.
 recolor :: StoreColor -> State -> State
 recolor color (State exp env (Store space supply size) cont) =
   (State exp env (Store space' supply size) cont)
@@ -318,6 +340,9 @@ recolor color (State exp env (Store space supply size) cont) =
       StoreVal badColor _ -> error $ "bad color " <> show badColor
       StoreForward _ -> error "forward found while recoloring"
 
+-- | Evacuates a state.
+-- All the root items (those external to the store) are located
+-- and copied to the new state "to-space".
 evacuateState :: State -> (State, State)
 evacuateState (State exp env store cont) =
   (State exp env from'' cont', State exp env' to'' cont')
@@ -325,6 +350,7 @@ evacuateState (State exp env store cont) =
     (env', from', to') = evacuateEnv env store storeEmpty
     (cont', from'', to'') = evacuateCont cont from' to'
 
+-- | Evacuates a continuation.
 evacuateCont :: Cont -> Store -> Store -> (Cont, Store, Store)
 evacuateCont = go
   where
@@ -338,6 +364,7 @@ evacuateCont = go
       in
         (Cont var exp env' cont', from', to')
 
+-- | Evacuates an environment.
 evacuateEnv :: Env -> Store -> Store -> (Env, Store, Store)
 evacuateEnv env =
   go (Map.toAscList env) env
@@ -355,6 +382,9 @@ evacuateEnv env =
         StoreForward addr' ->
             go vars (Map.insert var addr' env') from to
 
+-- | Scavenges a state.
+-- The state store is searched for additional items that need to
+-- be moved to "to-space".
 scavengeState :: State -> State -> (State, State)
 scavengeState stateFrom stateTo =
   ( State exp0 env0 store0' cont0
@@ -365,9 +395,9 @@ scavengeState stateFrom stateTo =
     (State exp1 env1 store1 cont1) = stateTo
     (store0', store1') = scavenge store0 store1
 
+-- | Scavenges a store.
 scavenge :: Store -> Store -> (Store, Store)
 scavenge storeFrom storeTo =
-  trace ("scav from: " <> show (storeSpace storeFrom) <> " scav to: " <> show (storeSpace storeTo)) $
   case grayItem of
     Just (addr, StoreVal _ (ValClos lam env)) ->
       let

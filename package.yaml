@@ -45,7 +45,7 @@ dependencies:
 - data-default
 - either
 - megaparsec
-# - mtl
+- mtl
 - raw-strings-qq
 # - safe
 - text

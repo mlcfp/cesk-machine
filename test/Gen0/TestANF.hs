@@ -2,14 +2,14 @@
 -- Copyright 2024 Michael P Williams. All rights reserved.
 --------------------------------------------------------------------------------
 
-module TestANF
+module Gen0.TestANF
   ( tests
   ) where
 
-import ANF
+import Gen0.ANF
 import Test.Framework (Test, testGroup)
 import Test.Framework.Providers.HUnit (testCase)
-import Test.HUnit (assertEqual, assertFailure)
+import Test.HUnit (assertEqual)
 import Text.RawString.QQ
 
 tests :: Test

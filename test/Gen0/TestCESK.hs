@@ -2,15 +2,14 @@
 -- Copyright 2024 Michael P Williams. All rights reserved.
 --------------------------------------------------------------------------------
 
-module TestCESK
+module Gen0.TestCESK
   ( tests
   ) where
 
-import ANF
-import CESK
+import Gen0.CESK
 import Test.Framework (Test, testGroup)
 import Test.Framework.Providers.HUnit (testCase)
-import Test.HUnit (assertEqual, assertFailure)
+import Test.HUnit (assertEqual)
 import Text.RawString.QQ
 
 tests :: Test

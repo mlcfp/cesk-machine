@@ -6,42 +6,47 @@ module Main
   ( main
   ) where
 
-import ANF
-import qualified CESK as CESK
-import Data.Either (fromRight)
+import qualified Gen0.CESK as CESK
 import qualified Data.Text as T
-import Data.Time.Clock (diffUTCTime, getCurrentTime)
+import Data.Time.Clock (getCurrentTime)
 import Text.RawString.QQ
+
+import Gen1.Normalize
+import Gen1.Scheme
 
 main :: IO ()
 main = do
   t0 <- getCurrentTime
   putStrLn $ show t0
-  -- let !e = CESK.run pFactoral
-  -- t1 <- getCurrentTime
-  -- putStrLn $ show e
-  -- putStrLn $ show t0
-  -- putStrLn $ show t1
-  -- putStrLn $ show $ diffUTCTime t1 t0
+  -- let e = CESK.run [r|
+  --   (define y (λ (n) (* 2 n)))
+  --   (define g (λ (x) (+ x 1)))
+  --   (define sqr (λ (a) (* a a)))
+  --   (sqr 2)
+  --   ;(sqr 2,)
+  -- |]
+  -- case e of
+  --   Left err -> putStrLn $ T.unpack err
+  --   Right v -> putStrLn $ show v
 
-  -- let a = parseANF "(let ((x 1)) x)"
-  -- let a = parseANF "(λ (x y) #f)"
-  -- let a = parseANF "(let (( y  1 )) x )"
-  -- let a = parseANF "(let (( y  1 )) (λ (x y) #f) )"
-  -- let a = parseANF "(let (( y  1 )) (let (( x  2 )) (* 2 3) ))"
-  -- let a = parseANF "(let (( y  1 )) (call/cc 2))"
-  -- let a = parseANF "(letrec (( y  1 )) x )"
-  -- let a = parseANF s1
-  -- putStrLn $ show a
-  -- runTestProg "(define (y 1)) y"
-  -- runTestProg "(define y (λ (n) (* 2 n))) (y 4)"
-  let e = CESK.run [r|
-    (define y (λ (n) (* 2 n)))
-    (define g (λ (x) (+ x 1)))
-    (define sqr (λ (a) (* a a)))
-    (sqr 2)
-    ;(sqr 2,)
-  |]
-  case e of
-    Left err -> putStrLn $ T.unpack err
-    Right v -> putStrLn $ show v
+  e <- pure (SchemeApp
+    [ (SchemeApp
+        [ SchemeExpVar (SchemeVar "x")
+        , SchemeExpInt 1
+        ])
+    , (SchemeApp
+        [ SchemeExpVar (SchemeVar "y")
+        , SchemeExpInt 2
+        ])
+    ])
+  e' <- schemeNormalize e
+  putStrLn $ show e
+  putStrLn $ show e'
+
+  putStrLn "exp:"
+  t <- schemeRender e
+  putStrLn $ T.unpack t
+
+  putStrLn "anf exp:"
+  t' <- schemeRender e'
+  putStrLn $ T.unpack t'

@@ -25,8 +25,11 @@ source-repository head
 
 library
   exposed-modules:
-      ANF
-      CESK
+      Gen0.ANF
+      Gen0.CESK
+      Gen1.ANF
+      Gen1.Normalize
+      Gen1.Scheme
   other-modules:
       Paths_cesk_machine
   autogen-modules:
@@ -52,6 +55,7 @@ library
     , data-default
     , either
     , megaparsec
+    , mtl
     , raw-strings-qq
     , text
     , time
@@ -85,6 +89,7 @@ executable cesk-machine
     , data-default
     , either
     , megaparsec
+    , mtl
     , optparse-applicative
     , raw-strings-qq
     , text
@@ -95,9 +100,9 @@ test-suite cesk-machine-test
   type: exitcode-stdio-1.0
   main-is: Test.hs
   other-modules:
-      TestANF
-      TestCESK
-      TestGC
+      Gen0.TestANF
+      Gen0.TestCESK
+      Gen0.TestGC
       Paths_cesk_machine
   autogen-modules:
       Paths_cesk_machine
@@ -124,6 +129,7 @@ test-suite cesk-machine-test
     , data-default
     , either
     , megaparsec
+    , mtl
     , raw-strings-qq
     , test-framework
     , test-framework-hunit
