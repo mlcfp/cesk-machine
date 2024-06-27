@@ -29,24 +29,80 @@ main = do
   --   Left err -> putStrLn $ T.unpack err
   --   Right v -> putStrLn $ show v
 
-  e <- pure (SchemeApp
-    [ (SchemeApp
-        [ SchemeExpVar (SchemeVar "x")
-        , SchemeExpInt 1
-        ])
-    , (SchemeApp
-        [ SchemeExpVar (SchemeVar "y")
-        , SchemeExpInt 2
-        ])
-    ])
-  e' <- schemeNormalize e
-  putStrLn $ show e
-  putStrLn $ show e'
+  -- e <- pure (SchemeExpApp
+  --   [ (SchemeExpApp
+  --       [ SchemeExpVar (SchemeVar "x")
+  --       , SchemeExpInt 1
+  --       ])
+  --   , (SchemeExpApp
+  --       [ SchemeExpVar (SchemeVar "y")
+  --       , SchemeExpInt 2
+  --       ])
+  --   ])
+  -- e' <- schemeNormalize e
+  -- putStrLn $ show e
+  -- putStrLn $ show e'
 
-  putStrLn "exp:"
-  t <- schemeRender e
-  putStrLn $ T.unpack t
+  -- putStrLn "exp:"
+  -- t <- schemeRender e
+  -- putStrLn $ T.unpack t
 
-  putStrLn "anf exp:"
-  t' <- schemeRender e'
-  putStrLn $ T.unpack t'
+  -- putStrLn "anf exp:"
+  -- t' <- schemeRender e'
+  -- putStrLn $ T.unpack t'
+
+  let Right prog = schemeParse testProg
+  putStrLn $ show prog
+  p <- schemeRender renderOptions prog
+  putStrLn $ T.unpack p
+
+  prog' <- normalizeProg prog
+  putStrLn $ show prog'
+  p' <- schemeRender renderOptions { renderOptionStyle = RenderPretty } prog'
+  putStrLn $ T.unpack p'
+
+
+-- testProg = "((f g) (h x) 3)"
+-- testProg = "(+ 2 (+ 3 (+ 4 5)))"
+-- testProg = "(f 1 2)"
+testProg = factorialProgram
+
+-- testProg = [r|
+-- (define (f x) (h x))
+-- (define (h x) (+ 1 x))
+-- (f 20)
+-- |]
+
+factorialProgram = [r|
+  (define (f n)
+    (if (= n 0)
+        1
+        (* n (f (- n 1)))))
+  (f 20)
+  |]
+
+f' = [r|
+(define f
+  (λ (n)
+    (let ((g1 (= n 0)))
+      (if g1
+        1
+        (let ((g2 (- n 1)))
+          (let ((g3 (f g2)))
+            (* n g3)))))))
+(f 20)|]
+
+fact = [r|
+      #|
+      factorial
+      |#
+      (define f
+        (λ (n)
+          (let ((g1 (= n 0)))
+            (if g1
+              1
+              (let ((g2 (- n 1)))
+                (let ((g3 (f g2)))
+                  (* n g3)))))))
+      ; factorial for 20
+      (f 20)|]

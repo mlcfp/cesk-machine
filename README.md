@@ -56,7 +56,7 @@ Name ideas
 
 X ANF parser
 - scheme to ANF compiler
-- scheme renderer
+X scheme renderer
 - anf renderer
 - add string and char values
 - add word values (bytes?)

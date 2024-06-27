@@ -117,7 +117,7 @@ parseAtomic = choice
   , try $ ANFAtomicVar <$> parseVar
   , try $ ANFAtomicInt <$> integer
   , try $ ANFAtomicLam <$> parseLam
-  , parens $ ANFAtomicPrim <$> prim <*> some parseAtomic
+  , parens $ ANFAtomicPrim <$> parsePrim <*> some parseAtomic
   ]
 
 -- | Parses a complex expression.
@@ -198,8 +198,8 @@ parseLetrec =
     pure $ ANFComplexLetRec bindings body
 
 -- | Parses a primary operator.
-prim :: Parser ANFPrim
-prim = choice
+parsePrim :: Parser ANFPrim
+parsePrim = choice
   [ ANFPrimAdd <$ symbol "+"
   , ANFPrimSub <$ symbol "-"
   , ANFPrimMul <$ symbol "*"

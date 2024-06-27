@@ -3,92 +3,44 @@
 --------------------------------------------------------------------------------
 
 module Gen1.Scheme
-  ( SchemeBind(..)
+  ( RenderOptions(..)
+  , RenderStyle(..)
+  , SchemeBind(..)
   , SchemeDec(..)
   , SchemeExp(..)
-  , SchemePrim(..)
   , SchemeProg(..)
   , SchemeVar(..)
-  -- , schemeParseExp
-  -- , schemeParseProg
+  , renderOptions
+  , schemeParse
   , schemeRender
   ) where
 
--- Input language:
-
--- <prog> ::= <dec> ...
-
--- <dec> ::= (define (<var> <name> ...) <exp>)
---        |  (define <var> <exp>)
---        |  <exp>
-
--- <exp> ::= (let ([<var> <exp>] ...) <exp>)
---        |  (if <exp> <exp> <exp>)
---        |  (set! <var> <exp>)
---        |  (λ (<name> ...) <exp>)
---        |  (<prim> exp1 ... expN)
---        |  <number>
---        |  <boolean>
---        |  <string>
---        |  <var>
---
--- <prim> ::=  +  |  -  |  *  |  =
-
-
--- Output language:
-
--- <prog> ::= <dec> ...
-
--- <dec> ::= (define <var> <exp>)
---        |  (begin <dec> ...)
---        |  <exp>
-
--- <aexp> ::= (λ (<name> ...) <exp>)
---         |  <number>
---         |  <boolean>
---         |  <string>
---         |  <var>
---         |  (void)
-
--- <cexp> ::= (<aexp> <aexp> ...)
---         |  (if <aexp> <exp> <exp>)
---         |  (set! <var> <exp>)
-
--- <exp> ::= (let ([<var> <cexp>]) <exp>)
---        |  <aexp>
---        |  <cexp>
-
-
-
 import Prelude hiding (exp)
-import Control.Monad (forM_, void)
+import Control.Monad (forM_, void, when)
 import Control.Monad.State (StateT(..), execStateT, get, put, modify)
 import Data.Either.Combinators (mapLeft)
 import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Void
+import Gen1.Parse
 import Text.Megaparsec
 import Text.Megaparsec.Char
-import qualified Text.Megaparsec.Char.Lexer as L
-
-
 
 -- <prog> ::= <dec> ...
-
+--
 -- <dec> ::= (define (<var> <name> ...) <exp>)
 --        |  (define <var> <exp>)
 --        |  <exp>
-
+--
 -- <exp> ::= (let ([<var> <exp>] ...) <exp>)
 --        |  (if <exp> <exp> <exp>)
 --        |  (set! <var> <exp>)
 --        |  (λ (<name> ...) <exp>)
+--        |  (<exp> ...)
 --        |  <number>
 --        |  <boolean>
 --        |  <string>
 --        |  <var>
-
-
 
 -- | Defines a program.
 newtype SchemeProg = SchemeProg [SchemeDec] deriving (Eq, Ord, Show)
@@ -109,7 +61,7 @@ data SchemeDec
 
 -- | Defines an expression.
 data SchemeExp
-  = SchemeApp [SchemeExp]
+  = SchemeExpApp [SchemeExp]
   | SchemeExpLet [SchemeBind] SchemeExp
   | SchemeExpLetRec [SchemeBind] SchemeExp
   | SchemeExpIf SchemeExp SchemeExp SchemeExp
@@ -121,259 +73,367 @@ data SchemeExp
   | SchemeExpFloat Double
   | SchemeExpBool Bool
   | SchemeExpStr Text
-  | SchemeExpPrim SchemePrim [SchemeExp]
   | SchemeExpVoid
     deriving (Eq, Ord, Show)
 
--- | Defines a primative operator.
-data SchemePrim
-  = SchemePrimAdd
-  | SchemePrimSub
-  | SchemePrimMul
-  | SchemePrimDiv
-  | SchemePrimEq
-    deriving (Eq, Ord, Show)
-
+-- | Defines the render style.
 data RenderStyle = RenderNormal | RenderPretty deriving (Eq, Ord, Show)
 
--- data RenderState = RenderState
---   { stateLevel :: Int
---   , stateStyle :: RenderStyle
---   } deriving (Eq, Ord, Show)
-
--- type Render = StateT RenderState IO
-
--- schemeRender :: SchemeExp -> IO Text
--- schemeRender exp =
---   evalStateT (schemeRenderExp exp) $ RenderState 0 RenderNormal
-
--- schemeRenderProg :: SchemeProg -> Render Text
--- schemeRenderProg (SchemeProg decs) = do
---   d <- forM decs schemeRenderDec
---   pure $ T.intercalate " " d
-
--- schemeRenderDec :: SchemeDec -> Render Text
--- schemeRenderDec = \case
---   SchemeDecFunc var vars exp -> do
---     undefined
---   SchemeDecDefine var exp -> do
---     undefined
---   SchemeDecBegin decs -> do
---     undefined
---   SchemeDecExp exp -> do
---     undefined
-
--- schemeRenderExp :: SchemeExp -> Render Text
--- schemeRenderExp = \case
---   SchemeApp exps -> do
---     forM exps schemeRenderExp >>= schemeRenderParen
---   SchemeExpLet bindings exp -> do
---     bind <- forM bindings schemeRenderBind >>= schemeRenderParen
---     body <- schemeRenderExp exp >>= \x -> schemeRenderParen [x]
---     schemeRenderParen ["let", bind, body]
---   SchemeExpLetRec bindings exp -> do
---     bind <- forM bindings schemeRenderBind >>= schemeRenderParen
---     body <- schemeRenderExp exp >>= \x -> schemeRenderParen [x]
---     schemeRenderParen ["letrec", bind, body]
---   SchemeExpIf exp0 exp1 exp2 -> do
---     e0 <- schemeRenderExp exp0
---     e1 <- schemeRenderExp exp1
---     e2 <- schemeRenderExp exp2
---     schemeRenderParen ["if", e0, e1, e2]
---   SchemeExpSet (SchemeVar var) exp -> do
---     e <- schemeRenderExp exp
---     schemeRenderParen ["set!", var, e]
---   SchemeExpCallCC exp -> do
---     e <- schemeRenderExp exp
---     schemeRenderParen ["call/cc", e]
---   SchemeExpLam vars exp -> do
---     args <- forM vars schemeRenderVar >>= schemeRenderParen
---     body <- schemeRenderExp exp
---     schemeRenderParen ["λ", args, body]
---   SchemeExpVar var -> do
---     schemeRenderVar var
---   SchemeExpInt x -> do
---     pure $ T.pack $ show x
---   SchemeExpFloat x -> do
---     pure $ T.pack $ show x
---   SchemeExpBool True -> do
---     pure "#t"
---   SchemeExpBool False -> do
---     pure "#f"
---   SchemeExpStr x -> do
---     pure $ "\"" <> x <> "\""
---   SchemeExpPrim prim exps -> do
---     p <- schemeRenderPrim prim
---     es <- forM exps schemeRenderExp
---     schemeRenderParen $ p : es
---   SchemeExpVoid -> do
---     pure "void"
-
--- schemeRenderBind :: SchemeBind -> Render Text
--- schemeRenderBind (SchemeBind var exp) = do
---   v <- schemeRenderVar var
---   e <- schemeRenderExp exp
---   schemeRenderParen [v, e]
-
--- schemeRenderVar :: SchemeVar -> Render Text
--- schemeRenderVar (SchemeVar name) = pure name
-
--- schemeRenderPrim :: SchemePrim -> Render Text
--- schemeRenderPrim = pure . \case
---   SchemePrimAdd -> "+"
---   SchemePrimSub -> "-"
---   SchemePrimMul -> "*"
---   SchemePrimDiv -> "/"
---   SchemePrimEq  -> "="
-
--- schemeRenderParen :: [Text] -> Render Text
--- schemeRenderParen xs =
---   pure $ "(" <> T.intercalate " " xs <> ")"
-
-data RenderState = RenderState
-  { stateLevel :: Int
-  , stateStyle :: RenderStyle
-  , stateText  :: Text
+-- | Defines the render options.
+data RenderOptions = RenderOptions
+  { renderOptionIndent :: Int
+  , renderOptionStyle  :: RenderStyle
   } deriving (Eq, Ord, Show)
 
+-- | Defines the render state.
+data RenderState = RenderState
+  { renderStateColumn  :: Int
+  , renderStateText    :: Text
+  , renderStateOptions :: RenderOptions
+  } deriving (Eq, Ord, Show)
+
+-- | Defines a renderer.
 type Render = StateT RenderState IO
 
-render :: Text -> Render ()
-render x = modify $ \s -> s { stateText = T.append (stateText s) x }
+-- | The default render options.
+renderOptions :: RenderOptions
+renderOptions = RenderOptions 2 RenderNormal
 
-renderOpen :: Render ()
-renderOpen = render "("
+-- | Renders a scheme program.
+schemeRender :: RenderOptions -> SchemeProg -> IO Text
+schemeRender opt exp = do
+  RenderState{..} <- execStateT (renderProg exp) $
+    RenderState 0 T.empty opt
+  pure $ T.strip renderStateText
 
-renderClose :: Render ()
-renderClose = render ")"
+-- | Increases the indentation column.
+indentInc :: Render ()
+indentInc = do
+  RenderState{..} <- get
+  RenderOptions{..} <- pure renderStateOptions
+  renderStateColumn <- pure $ renderStateColumn + renderOptionIndent
+  put RenderState{..}
 
-renderSpace :: Render ()
-renderSpace = render " "
+-- | Decreases the indentation column.
+indentDec :: Render ()
+indentDec = do
+  RenderState{..} <- get
+  RenderOptions{..} <- pure renderStateOptions
+  renderStateColumn <- pure $ renderStateColumn - renderOptionIndent
+  put RenderState{..}
 
-schemeRender :: SchemeExp -> IO Text
-schemeRender exp = do
-  RenderState{..} <- execStateT (schemeRenderExp exp) $
-    RenderState 0 RenderNormal T.empty
-  pure stateText
-
--- schemeRenderProg :: SchemeProg -> Render Text
--- schemeRenderProg (SchemeProg decs) = do
---   d <- forM decs schemeRenderDec
---   pure $ T.intercalate " " d
-
--- schemeRenderDec :: SchemeDec -> Render Text
--- schemeRenderDec = \case
---   SchemeDecFunc var vars exp -> do
---     undefined
---   SchemeDecDefine var exp -> do
---     undefined
---   SchemeDecBegin decs -> do
---     undefined
---   SchemeDecExp exp -> do
---     undefined
-
-schemeRenderExp :: SchemeExp -> Render ()
-schemeRenderExp = \case
-  SchemeApp exps -> do
-    renderOpen
-    forM_ exps $ \e -> do
+-- | Renders a newline.
+renderNewline :: Render ()
+renderNewline = do
+  RenderState{..} <- get
+  case renderOptionStyle renderStateOptions of
+    RenderNormal ->
       renderSpace
-      schemeRenderExp e
+    RenderPretty ->
+      renderText $ "\n" <> T.replicate renderStateColumn " "
+
+-- | Renders literal text.
+renderText :: Text -> Render ()
+renderText x = modify $ \s ->
+  s { renderStateText = T.append (renderStateText s) x }
+
+-- | Renders an open parenthesis.
+renderOpen :: Render ()
+renderOpen = renderText "("
+
+-- | Renders a close parenthesis.
+renderClose :: Render ()
+renderClose = renderText ")"
+
+-- | Renders a space character.
+renderSpace :: Render ()
+renderSpace = renderText " "
+
+-- | Renders a program.
+renderProg :: SchemeProg -> Render ()
+renderProg (SchemeProg decs) = do
+  forM_ (zip [0..] decs) $ \(i :: Int, d) -> do
+    renderDec d
+    renderNewline
+
+-- | Renders a declaration.
+renderDec :: SchemeDec -> Render ()
+renderDec = \case
+  SchemeDecFunc var vars exp -> do
+    renderOpen
+    renderText "define"
+    renderSpace
+    renderOpen
+    renderVar var
+    forM_ vars $ \v -> do
+      renderSpace
+      renderVar v
+    renderClose
+    indentInc
+    renderNewline
+    renderExp exp
+    renderClose
+    indentDec
+  SchemeDecDefine var exp -> do
+    renderOpen
+    renderText "define"
+    renderSpace
+    renderVar var
+    renderSpace
+    renderExp exp
+    renderClose
+  SchemeDecBegin decs -> do
+    renderOpen
+    renderText "begin"
+    indentInc
+    forM_ decs $ \d -> do
+      renderNewline
+      renderDec d
+    renderClose
+    indentDec
+  SchemeDecExp exp -> do
+    renderExp exp
+
+-- | Renders an expression.
+renderExp :: SchemeExp -> Render ()
+renderExp = \case
+  SchemeExpApp exps -> do
+    renderOpen
+    forM_ (zip [0..] exps) $ \(i :: Int, e) -> do
+      when (i > 0) renderSpace
+      renderExp e
     renderClose
   SchemeExpLet bindings exp -> do
-    schemeRenderLet "let" bindings exp
+    renderLet "let" bindings exp
   SchemeExpLetRec bindings exp -> do
-    schemeRenderLet "letrec" bindings exp
+    renderLet "letrec" bindings exp
   SchemeExpIf exp0 exp1 exp2 -> do
     renderOpen
-    render "if"
+    renderText "if"
     renderSpace
-    schemeRenderExp exp0
-    renderSpace
-    schemeRenderExp exp1
-    renderSpace
-    schemeRenderExp exp2
+    renderExp exp0
+    indentInc
+    renderNewline
+    renderExp exp1
+    renderNewline
+    renderExp exp2
     renderClose
+    indentDec
   SchemeExpSet var exp -> do
     renderOpen
-    render "set!"
+    renderText "set!"
     renderSpace
-    schemeRenderVar var
+    renderVar var
     renderSpace
-    schemeRenderExp exp
+    renderExp exp
     renderClose
   SchemeExpCallCC exp -> do
     renderOpen
-    render "call/cc"
+    renderText "call/cc"
     renderSpace
-    schemeRenderExp exp
+    renderExp exp
     renderClose
   SchemeExpLam vars exp -> do
     renderOpen
-    render "λ"
+    renderText "λ"
     renderSpace
     renderOpen
-    forM_ vars $ \v -> do
-      renderSpace
-      schemeRenderVar v
+    forM_ (zip [0..] vars) $ \(i :: Int, v) -> do
+      when (i > 0) renderSpace
+      renderVar v
     renderClose
-    renderSpace
-    schemeRenderExp exp
+    indentInc
+    renderNewline
+    renderExp exp
     renderClose
+    indentDec
   SchemeExpVar var -> do
-    schemeRenderVar var
+    renderVar var
   SchemeExpInt x -> do
-    render $ T.pack $ show x
+    renderText $ T.pack $ show x
   SchemeExpFloat x -> do
-    render $ T.pack $ show x
+    renderText $ T.pack $ show x
   SchemeExpBool True -> do
-    render "#t"
+    renderText "#t"
   SchemeExpBool False -> do
-    render "#f"
+    renderText "#f"
   SchemeExpStr x -> do
-    render "\""
-    render x
-    render "\""
-  SchemeExpPrim prim exps -> do
-    renderOpen
-    schemeRenderPrim prim
-    forM_ exps $ \e -> do
-      renderSpace
-      schemeRenderExp e
-    renderClose
+    renderText "\""
+    renderText x
+    renderText "\""
   SchemeExpVoid -> do
-    render "#<void>"
+    renderText "#<void>"
 
-schemeRenderLet :: Text -> [SchemeBind] -> SchemeExp -> Render ()
-schemeRenderLet name bindings exp = do
-    renderOpen
-    render name
-    renderSpace
-    renderOpen
-    forM_ bindings $ \b -> do
-      renderSpace
-      schemeRenderBind b
-    renderClose
-    renderSpace
-    schemeRenderExp exp
-    renderClose
-
-schemeRenderBind :: SchemeBind -> Render ()
-schemeRenderBind (SchemeBind var exp) = do
+-- | Renders a let style form.
+renderLet :: Text -> [SchemeBind] -> SchemeExp -> Render ()
+renderLet name bindings exp = do
   renderOpen
-  schemeRenderVar var
+  renderText name
   renderSpace
-  schemeRenderExp exp
+  renderOpen
+  forM_ (zip [0..] bindings) $ \(i :: Int, b) -> do
+    when (i > 0) renderSpace
+    renderBind b
+  renderClose
+  indentInc
+  renderNewline
+  renderExp exp
+  renderClose
+  indentDec
+
+-- | Renders a binding.
+renderBind :: SchemeBind -> Render ()
+renderBind (SchemeBind var exp) = do
+  renderOpen
+  renderVar var
+  renderSpace
+  renderExp exp
   renderClose
 
-schemeRenderVar :: SchemeVar -> Render ()
-schemeRenderVar (SchemeVar name) = render name
+-- | Renders a variable.
+renderVar :: SchemeVar -> Render ()
+renderVar (SchemeVar name) = renderText name
 
-schemeRenderPrim :: SchemePrim -> Render ()
-schemeRenderPrim = render . \case
-  SchemePrimAdd -> "+"
-  SchemePrimSub -> "-"
-  SchemePrimMul -> "*"
-  SchemePrimDiv -> "/"
-  SchemePrimEq  -> "="
+-- | Parses a scheme program.
+schemeParse :: Text -> Either Text SchemeProg
+schemeParse = mapLeft renderError . runParser parseProg ""
 
+-- | Parses a program.
+parseProg :: Parser SchemeProg
+parseProg = spaceConsumer >> (SchemeProg <$> many parseDec)
+
+-- | Parses a declaration.
+parseDec :: Parser SchemeDec
+parseDec = choice
+  [ try parseFunc
+  , try parseDefine
+  , try parseBegin
+  , SchemeDecExp <$> parseExp
+  ]
+
+-- | Parses a function definition.
+parseFunc :: Parser SchemeDec
+parseFunc =
+  parseParens $ do
+    void $ parseSymbol "define"
+    void $ parseSymbol "("
+    var <- parseVar
+    vars <- many parseVar
+    void $ parseSymbol ")"
+    exp <- parseExp
+    pure $ SchemeDecFunc var vars exp
+
+-- | Parses a definition.
+parseDefine :: Parser SchemeDec
+parseDefine =
+  parseParens $ do
+    void $ parseSymbol "define"
+    SchemeDecDefine <$> parseVar <*> parseExp
+
+-- | Parses a begin.
+parseBegin :: Parser SchemeDec
+parseBegin =
+  parseParens $ do
+    void $ parseSymbol "begin"
+    SchemeDecBegin <$> many parseDec
+
+-- | Parses an expression.
+parseExp :: Parser SchemeExp
+parseExp = choice
+  [ try parseLam
+  , try parseLet
+  , try parseLetrec
+  , try parseIf
+  , try parseSet
+  , try parseCallCC
+  , try $ SchemeExpVar <$> parseVar
+  , try $ SchemeExpInt <$> parseInteger
+  , try $ SchemeExpFloat <$> parseDouble
+  , try $ SchemeExpBool True <$ parseTrue
+  , try $ SchemeExpBool False <$ parseFalse
+  , try $ SchemeExpStr <$> parseString
+  , try $ SchemeExpVoid <$ parseVoid
+  , parseApp
+  ]
+
+-- | Parses a variable name.
+parseVar :: Parser SchemeVar
+-- parseVar = SchemeVar <$> parseIdentifier
+parseVar = SchemeVar <$> choice
+  [ try $ parseSymbol "+"
+  , try $ parseSymbol "-"
+  , try $ parseSymbol "*"
+  , try $ parseSymbol "/"
+  , try $ parseSymbol "="
+  , parseIdentifier
+  ]
+
+-- | Parses a lambda form.
+parseLam :: Parser SchemeExp
+parseLam =
+  parseParens $ do
+    void $ parseSymbol "λ"
+    vars <- parseParens $ many parseVar
+    exp <- parseExp
+    pure $ SchemeExpLam vars exp
+
+-- | Parses an if expression.
+parseIf :: Parser SchemeExp
+parseIf =
+  parseParens $ do
+    void $ parseSymbol "if"
+    SchemeExpIf <$> parseExp <*> parseExp <*> parseExp
+
+-- | Parses a call/cc form.
+parseCallCC :: Parser SchemeExp
+parseCallCC =
+  parseParens $ do
+    void $ parseSymbol "call/cc"
+    SchemeExpCallCC <$> parseExp
+
+-- | Parses a mutation.
+parseSet :: Parser SchemeExp
+parseSet =
+  parseParens $ do
+    void $ parseSymbol "set!"
+    SchemeExpSet <$> parseVar <*> parseExp
+
+-- | Parses an application.
+parseApp :: Parser SchemeExp
+parseApp = parseParens $ SchemeExpApp <$> some parseExp
+
+-- | Parses a binding.
+parseBinding :: Parser SchemeBind
+parseBinding = parseParens $ SchemeBind <$> parseVar <*> parseExp
+
+-- | Parses a let expression.
+parseLet :: Parser SchemeExp
+parseLet = parseParens $ do
+  void $ parseSymbol "let"
+  void $ parseSymbol "("
+  bindings <- some parseBinding
+  void $ parseSymbol ")"
+  body <- parseExp
+  pure $ SchemeExpLet bindings body
+
+-- | Parses a letrec expression.
+parseLetrec :: Parser SchemeExp
+parseLetrec = parseParens $ do
+  void $ parseSymbol "letrec"
+  void $ parseSymbol "("
+  bindings <- some parseBinding
+  void $ parseSymbol ")"
+  body <- parseExp
+  pure $ SchemeExpLetRec bindings body
+
+-- | Parses a true literal.
+parseTrue :: Parser ()
+parseTrue = void $ try (parseSymbol "#t") <|> parseSymbol "#true"
+
+-- | Parses a false literal.
+parseFalse :: Parser ()
+parseFalse = void $ try (parseSymbol "#f") <|> parseSymbol "#false"
+
+-- | Parses a void literal.
+parseVoid :: Parser ()
+parseVoid = void $ parseSymbol "#void"
