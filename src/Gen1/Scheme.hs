@@ -358,7 +358,6 @@ parseExp = choice
 
 -- | Parses a variable name.
 parseVar :: Parser SchemeVar
--- parseVar = SchemeVar <$> parseIdentifier
 parseVar = SchemeVar <$> choice
   [ try $ parseSymbol "+"
   , try $ parseSymbol "-"

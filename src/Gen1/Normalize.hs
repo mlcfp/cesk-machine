@@ -60,16 +60,8 @@ normalize exp k = case exp of
     normalizeName e $ \t -> do
       normalizeNames es $ \ts -> do
         k $ SchemeExpApp (t:ts)
-
--- [`(let ([,x ,exp1] . ,clause) ,exp2)
---       (normalize exp1 (λ (aexp1)
---        `(let ([,x ,aexp1])
---          ,(normalize `(let (,@clause) ,exp2) k))))]
--- [`(let () ,exp)
---       (normalize exp k)]
   SchemeExpLet [] e -> do
     normalize e k
-
   SchemeExpLet ((SchemeBind v e1):bs) e2 -> do
     normalize e1 $ \t -> do
       body <- normalize (SchemeExpLet bs e2) k
