@@ -159,8 +159,8 @@ parseAtomic :: Parser ANFAtomic
 parseAtomic = choice
   [ try $ ANFAtomicBool <$> parseBool
   , try $ ANFAtomicVar <$> parseVar
-  , try $ ANFAtomicInt <$> parseInteger
   , try $ ANFAtomicFloat <$> parseDouble
+  , try $ ANFAtomicInt <$> parseInteger
   , try $ ANFAtomicStr <$> parseString
   , try $ ANFAtomicLam <$> parseLam
   , parseParens $ ANFAtomicPrim <$> parsePrim <*> some parseAtomic

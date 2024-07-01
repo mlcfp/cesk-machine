@@ -10,6 +10,8 @@ import Test.Framework
 import qualified Gen0.TestANF
 import qualified Gen0.TestCESK
 import qualified Gen0.TestGC
+import qualified Gen1.TestANF
+import qualified Gen1.TestCESK
 import qualified Gen1.TestNormalize
 import qualified Gen1.TestScheme
 
@@ -20,4 +22,6 @@ main = defaultMain
   , Gen0.TestGC.tests
   , Gen1.TestScheme.tests
   , Gen1.TestNormalize.tests
+  , Gen1.TestANF.tests
+  , Gen1.TestCESK.tests
   ]

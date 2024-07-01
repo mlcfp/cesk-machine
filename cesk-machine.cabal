@@ -28,9 +28,11 @@ library
       Gen0.ANF
       Gen0.CESK
       Gen1.ANF
+      Gen1.CESK
       Gen1.Normalize
       Gen1.Parse
       Gen1.Scheme
+      Gen1.Util
   other-modules:
       Paths_cesk_machine
   autogen-modules:
@@ -104,6 +106,8 @@ test-suite cesk-machine-test
       Gen0.TestANF
       Gen0.TestCESK
       Gen0.TestGC
+      Gen1.TestANF
+      Gen1.TestCESK
       Gen1.TestNormalize
       Gen1.TestScheme
       Paths_cesk_machine
