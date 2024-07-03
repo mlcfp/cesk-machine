@@ -89,6 +89,12 @@ data CESKVal
   | CESKValCont CESKCont
     deriving (Eq, Ord, Show)
 
+data CESKStats = CESKStats
+  { ceskStepCount      :: Integer
+  , ceskStepCountGC    :: Integer
+  , ceskStepCountTotal :: Integer
+  }
+
 -- runProg :: ANFProg -> CESKVal
 -- runProg prog =
 --   case x of
@@ -124,7 +130,7 @@ ceskEval source = do
       throwError e
 
 -- | Loops over the steps until program evalutation is complete.
-ceskLoop :: CESK CESKVal
+ceskLoop :: CESKStats -> CESK (CESKStats, CESKVal)
 ceskLoop = do
   CESKState{..} <- get
   case ceskStateExp of
@@ -309,18 +315,34 @@ ceskApplyCont val = do
 
 -- | Defines an empty environment.
 ceskEnvEmpty :: CESKEnv
-ceskEnvEmpty = Map.empty
+ceskEnvEmpty = envEmpty
 
 -- | Gets the address for a variable from the current environment.
 ceskEnvGet :: ANFVar -> CESK CESKAddr
 ceskEnvGet var = do
-  gets ceskStateEnv >>= maybe
-    (throwError $ "bad var " <> textShow var) pure . Map.lookup var
+  CESKState{..} <- get
+  envGet ceskStateEnv var
 
 -- | Puts a variable in the current environment.
 ceskEnvPut :: ANFVar -> CESKAddr -> CESK ()
 ceskEnvPut var addr = do
-  modify $ \s -> s { ceskStateEnv = Map.insert var addr $ ceskStateEnv s }
+  CESKState{..} <- get
+  env <- envPut ceskStateEnv var addr
+  modify $ \s -> s { ceskStateEnv = env }
+
+-- | Defines an empty environment.
+envEmpty :: CESKEnv
+envEmpty = Map.empty
+
+-- | Puts a variable in the current environment.
+envPut :: CESKEnv -> ANFVar -> CESKAddr -> CESK CESKEnv
+envPut env var addr = do
+  pure $ Map.insert var addr env
+
+-- | Gets the address for a variable from the current environment.
+envGet :: CESKEnv -> ANFVar -> CESK CESKAddr
+envGet env var = do
+  maybe (throwError $ "bad var " <> textShow var) pure $ Map.lookup var env
 
 -- | Gets the value for a variable.
 ceskGetVar :: ANFVar -> CESK CESKVal
@@ -348,26 +370,53 @@ ceskStoreEmpty = storeEmpty
 ceskStoreAlloc :: CESKVal -> CESKStoreColor -> CESK CESKAddr
 ceskStoreAlloc val color = do
   CESKState{..} <- get
-  -- CESKStore{..} <- pure ceskStateStore
-  -- ceskStoreAddr <- pure $ ceskStoreAddr + 1
-  -- addr <- pure $ CESKAddr ceskStoreAddr
-  -- ceskStoreSpace <- pure $
-  --   Map.insert addr (CESKStoreVal color val) ceskStoreSpace
-  -- ceskStoreSize <- pure $ ceskStoreSize + 1
-  -- ceskStateStore <- pure CESKStore{..}
-  -- put CESKState{..}
-  -- pure addr
-  (store, addr) <- storeAlloc ceskStateStore
+  (store, addr) <- storeAlloc ceskStateStore val color
   modify $ \s -> s { ceskStateStore = store }
   pure addr
-  -- put $ CESKState
-  -- { ceskStateExp   =
-  -- , ceskStateEnv   =
-  -- , ceskStateStore = s
-  -- , ceskStateCont  = ceskStateCont
-  -- }
 
+-- | Frees a value from the store.
+ceskStoreFree :: CESKAddr -> CESK ()
+ceskStoreFree addr = do
+  CESKState{..} <- get
+  store <- storeFree ceskStateStore addr
+  modify $ \s -> s { ceskStateStore = store }
 
+-- | Updates the value at an address in the store.
+ceskStorePutVal :: CESKAddr -> CESKVal -> CESK ()
+ceskStorePutVal addr val = do
+  CESKState{..} <- get
+  store <- storePutVal ceskStateStore addr val
+  modify $ \s -> s { ceskStateStore = store }
+
+-- | Updates a store item at an address in the store.
+ceskStorePutItem :: CESKAddr -> CESKStoreItem -> CESK ()
+ceskStorePutItem addr item = do
+  CESKState{..} <- get
+  store <- storePutItem ceskStateStore addr item
+  modify $ \s -> s { ceskStateStore = store }
+
+-- | Gets a value from the store.
+ceskStoreGetVal :: CESKAddr -> CESK CESKVal
+ceskStoreGetVal addr = do
+  CESKState{..} <- get
+  storeGetVal ceskStateStore addr
+
+-- | Gets an item from the store.
+ceskStoreGetItem :: CESKAddr -> CESK CESKStoreItem
+ceskStoreGetItem addr = do
+  CESKState{..} <- get
+  storeGetItem ceskStateStore addr
+
+-- | Defines an empty store.
+storeEmpty :: CESKStore
+storeEmpty = CESKStore
+  { ceskStoreSpace = Map.empty
+  , ceskStoreAddr  = 0
+  , ceskStoreSize  = 0
+  }
+
+-- | Allocates a value in a store and returns the
+-- unpdated store and its address.
 storeAlloc :: CESKStore -> CESKVal -> CESKStoreColor -> CESK (CESKStore, CESKAddr)
 storeAlloc CESKStore{..} val color =
   pure (s, a)
@@ -380,25 +429,7 @@ storeAlloc CESKStore{..} val color =
       , ceskStoreSize  = ceskStoreSize + 1
       }
 
-
-
-
--- | Frees a value from the store.
-ceskStoreFree :: CESKAddr -> CESK ()
-ceskStoreFree addr = do
-  CESKState{..} <- get
-  -- CESKStore{..} <- pure ceskStateStore
-  -- if | Map.notMember addr ceskStoreSpace -> do
-  --       throwError $ "free bad addr " <> textShow addr
-  --    | otherwise -> do
-  --       ceskStoreSpace <- pure $ Map.delete addr ceskStoreSpace
-  --       ceskStoreSize <- pure $ ceskStoreSize - 1
-  --       ceskStateStore <- pure CESKStore{..}
-  --       put CESKState{..}
-  store <- storeFree ceskStateStore addr
-  modify $ \s -> s { ceskStateStore = store }
-
-
+-- | Frees a value from a store.
 storeFree :: CESKStore -> CESKAddr -> CESK CESKStore
 storeFree CESKStore{..} addr
   | Map.notMember addr ceskStoreSpace = do
@@ -410,188 +441,175 @@ storeFree CESKStore{..} addr
         , ceskStoreSize  = ceskStoreSize - 1
         }
 
-
-
 -- | Updates the value at an address in a store.
-ceskStorePutVal :: CESKAddr -> CESKVal -> CESK ()
-ceskStorePutVal addr val = do
-  -- ceskStorePutItem addr $ CESKStoreVal CESKStoreWhite val
-  CESKState{..} <- get
-  store <- storePutVal ceskStateStore addr val
-  modify $ \s -> s { ceskStateStore = store }
-
-
 storePutVal :: CESKStore -> CESKAddr -> CESKVal -> CESK CESKStore
 storePutVal store addr val = do
   storePutItem store addr $ CESKStoreVal CESKStoreWhite val
 
-
-
 -- | Updates a store item at an address in a store.
-ceskStorePutItem :: CESKAddr -> CESKStoreItem -> CESK ()
-ceskStorePutItem addr item = do
-  CESKState{..} <- get
-  -- CESKStore{..} <- pure ceskStateStore
-  -- ceskStoreSpace <- pure $ Map.insert addr item ceskStoreSpace
-  -- ceskStateStore <- pure CESKStore{..}
-  -- put CESKState{..}
-  store <- storePutItem ceskStateStore addr item
-  modify $ \s -> s { ceskStateStore = store }
-
-
 storePutItem :: CESKStore -> CESKAddr -> CESKStoreItem -> CESK CESKStore
 storePutItem store addr item = do
   let space = ceskStoreSpace store
   pure store { ceskStoreSpace = Map.insert addr item space }
 
-
-
 -- | Gets a value from a store.
-ceskStoreGetVal :: CESKAddr -> CESK CESKVal
-ceskStoreGetVal addr = do
-  CESKState{..} <- get
-  storeGetVal ceskStateStore addr
-  -- ceskStoreGetItem addr >>= \case
-  --   Just (CESKStoreVal _ val) ->
-  --     pure val
-  --   Just (CESKStoreForward _) ->
-  --     throwError "bad store value"
-  --   Nothing ->
-  --     throwError $ "bad address " <> textShow addr
-
 storeGetVal :: CESKStore -> CESKAddr -> CESK CESKVal
 storeGetVal store addr = do
   storeGetItem store addr >>= \case
-    Just (CESKStoreVal _color val) -> do
+    CESKStoreVal _color val -> do
       pure val
-    Just (CESKStoreForward _) -> do
+    CESKStoreForward _addr -> do
       throwError "bad store value"
+
+-- | Gets an item from a store.
+storeGetItem :: CESKStore -> CESKAddr -> CESK CESKStoreItem
+storeGetItem CESKStore{..} addr = do
+  case Map.lookup addr ceskStoreSpace of
     Nothing -> do
       throwError $ "bad address " <> textShow addr
-
-
-
--- | Gets an item from a store.
-ceskStoreGetItem :: CESKAddr -> CESK (Maybe CESKStoreItem)
-ceskStoreGetItem addr = do
-  CESKStore{..} <- gets ceskStateStore
-  storeGetItem ceskStoreSpace addr
-
--- | Gets an item from a store.
-storeGetItem :: CESKStore -> CESKAddr -> CESK (Maybe CESKStoreItem)
-storeGetItem CESKStore{..} addr = do
-  pure $ Map.lookup addr ceskStoreSpace
-
-
-
--- | Defines an empty store.
-storeEmpty :: CESKStore
-storeEmpty = CESKStore
-  { ceskStoreSpace = Map.empty
-  , ceskStoreAddr  = 0
-  , ceskStoreSize  = 0
-  }
-
-
-
-
+    Just item -> do
+      pure item
 
 -- | Performs garbage collection on a state.
 -- Returns a tuple of the modified old state (for testing purposes) and
 -- the new, resulting state respectively.
-ceskGarbageCollect :: CESKState -> (CESKState, CESKState)
-ceskGarbageCollect state =
-  (stateFrom', stateTo'')
+ceskGarbageCollect :: CESKState -> CESK (CESKState, CESKState)
+ceskGarbageCollect state = do
+  (stateFrom, stateTo) <- ceskEvacuateState state
+  (stateFrom0, stateTo0) <- ceskScavengeState stateFrom stateTo
+  stateTo' <- ceskColor stateTo0 CESKStoreWhite
+  pure (stateFrom0, stateTo')
+
+-- | Evacuates a state.
+-- All the root items (those external to the store) are located
+-- and copied to the new state "to-space".
+ceskEvacuateState :: CESKState -> CESK (CESKState, CESKState)
+ceskEvacuateState (CESKState exp env store cont) = do
+  (from0, to0, env') <- ceskEvacuateEnv store ceskStoreEmpty env
+  (from', to', cont') <- ceskEvacuateCont from0 to0 cont
+  pure (CESKState exp env from' cont', CESKState exp env' to' cont')
+
+-- | Evacuates a continuation.
+ceskEvacuateCont :: CESKStore -> CESKStore -> CESKCont -> CESK (CESKStore, CESKStore, CESKCont)
+ceskEvacuateCont storeFrom storeTo = \case
+  CESKHalt -> do
+    pure (storeFrom, storeTo, CESKHalt)
+  CESKCont var exp env cont -> do
+    (from0, to0, env') <- ceskEvacuateEnv storeFrom storeTo env
+    (from', to', cont') <- ceskEvacuateCont from0 to0 cont
+    pure (from', to', CESKCont var exp env' cont')
+
+-- | Evacuates an environment.
+ceskEvacuateEnv :: CESKStore -> CESKStore -> CESKEnv -> CESK (CESKStore, CESKStore, CESKEnv)
+ceskEvacuateEnv storeFrom storeTo env =
+  go storeFrom storeTo env $ Map.toAscList env
   where
-    (stateFrom, stateTo) = evacuateState state
-    (stateFrom', stateTo') = scavengeState stateFrom stateTo
-    stateTo'' = recolor CESKStoreWhite stateTo'
+    go from to env' = \case
+      (var, addr):vars -> do
+        storeGetItem from addr >>= \case
+          CESKStoreForward addr' -> do
+            go from to (Map.insert var addr' env') vars
+          CESKStoreVal _color val -> do
+            (to', addr') <- storeAlloc storeTo val CESKStoreGray
+            from' <- storePutItem storeFrom addr $ CESKStoreForward addr'
+            go from' to' (Map.insert var addr' env') vars
+      [] -> do
+        pure (from, to, env')
 
+-- | Scavenges a state.
+-- The state store is searched for additional items that need to
+-- be moved to "to-space".
+ceskScavengeState :: CESKState -> CESKState -> CESK (CESKState, CESKState)
+ceskScavengeState stateFrom stateTo = do
+  let (CESKState exp0 env0 store0 cont0) = stateFrom
+  let (CESKState exp1 env1 store1 cont1) = stateTo
+  (store0', store1') <- ceskScavenge store0 store1
+  pure $
+    ( CESKState exp0 env0 store0' cont0
+    , CESKState exp1 env1 store1' cont1
+    )
 
-data GCCycle = GCCycle
-  { gcCycleEnv  :: CESKEnv
-  , gcCycleFrom :: CESKStore
-  , gcCycleTo   :: CESKStore
-  }
-
-data CESKState = CESKState
-  { ceskStateExp   :: ANFExp
-  , ceskStateEnv   :: CESKEnv
-  , ceskStateStore :: CESKStore
-  , ceskStateCont  :: CESKCont
-  } deriving (Eq, Ord, Show)
-
-
-
-ceskGarbageCollect :: CESK ()
-ceskGarbageCollect = do
-  undefined
-
-ceskColorState :: CESKStoreColor -> CESKState -> CESK CESKState
-ceskColorState color to = do
-  undefined
-
-ceskEvacuateState :: GCCycle -> CESK GCCycle
-ceskEvacuateState = do
-  undefined
-
-ceskScavengeState :: GCCycle -> CESK GCCycle
-ceskScavengeState to = do
-  undefined
-
--- evacuateCont :: CESKCont -> CESKStore -> CESKStore -> (CESKCont, CESKStore, CESKStore)
-ceskEvacuateCont :: GCCycle -> CESK GCCycle
-ceskEvacuateCont to = do
-  undefined
-
--- evacuateEnv :: CESKEnv -> CESKStore -> CESKStore -> (CESKEnv, CESKStore, CESKStore)
-ceskEvacuateEnv :: GCCycle -> CESK GCCycle
-ceskEvacuateEnv cycle@GCCycle{..} = do
-  go (Map.toAscList gcCycleEnv) cycle
+-- | Scavenges a store.
+ceskScavenge :: CESKStore -> CESKStore -> CESK (CESKStore, CESKStore)
+ceskScavenge storeFrom storeTo =
+  case grayItem of
+    Just (addr, CESKStoreVal _ (CESKValClos lam env)) -> do
+      (from0, to0, env') <- ceskEvacuateEnv storeFrom storeTo env
+      to' <- storePutItem to0 addr $ blackVal $ CESKValClos lam env'
+      ceskScavenge from0 to'
+    Just (addr, CESKStoreVal _ (CESKValCont cont)) -> do
+      (from0, to0, cont') <- ceskEvacuateCont storeFrom storeTo cont
+      to' <- storePutItem to0 addr $ blackVal $ CESKValCont cont'
+      ceskScavenge from0 to'
+    Just (addr, CESKStoreVal _ val) -> do
+      to' <- storePutItem storeTo addr $ blackVal val
+      ceskScavenge storeFrom to'
+    Just (_, CESKStoreForward _) -> do
+      throwError "forward found while scavenging"
+    Nothing -> do
+      pure (storeFrom, storeTo)
   where
-    go [(CESKVar,CESKAddr)] -> GCCycle -> CESK GCCycle
-    go [] cycle = do
-      pure cycle
-    go ((var, addr):vars) (GCCycle env storeFrom storeTo) = do
-      case storeGetItem storeFrom addr of
-        CESKStoreForward addrForward -> do
-          go vars GCCycle
-            { gcCycleEnv  = Map.insert var addrForward env
-            , gcCycleFrom = storeFrom
-            , gcCycleTo   = storeTo
-            }
-        CESKStoreVal _color val -> do
-          let
-            (to', addrVal) = storeAlloc to val CESKStoreGray
-            from' = storePutItem from addr $ CESKStoreForward addrVal
-          go vars GCCycle
-            { gcCycleEnv  = Map.insert var addrForward env
-            , gcCycleFrom = storeFrom
-            , gcCycleTo   = storeTo
-            }
+    isGray (CESKStoreVal CESKStoreGray _) = True
+    isGray _ = False
+    (grayMap, _) = Map.partition isGray $ ceskStoreSpace storeTo
+    grayItem = Map.lookupMin grayMap
+    blackVal = CESKStoreVal CESKStoreBlack
+
+-- | Changes the collection color of a state.
+-- The supplied state is expected to be all black at this point,
+-- so recolor also acts as a validator of this requirement.
+ceskColor :: CESKState -> CESKStoreColor -> CESK CESKState
+ceskColor (CESKState exp env (CESKStore space supply size) cont) color = do
+  space' <- forM space $ \case
+    CESKStoreVal CESKStoreBlack val -> do
+      pure $ CESKStoreVal color val
+    CESKStoreVal c _ -> do
+      throwError $ "bad color " <> textShow c
+    CESKStoreForward _ -> do
+      throwError "forward found while recoloring"
+  pure $ CESKState exp env (CESKStore space' supply size) cont
 
 
+-- ceskEvacuateEnv :: GCCycle -> CESK GCCycle
+-- ceskEvacuateEnv cycle = do
+--   go (Map.toAscList $ gcCycleEnv cycle) cycle
+--   where
+--     -- go :: [(ANFVar,CESKAddr)] -> GCCycle -> CESK GCCycle
+--     go [] cycle = do
+--       pure cycle
+--     go ((var, addr):vars) (GCCycle env cont storeFrom storeTo) = do
+--       storeGetItem storeFrom addr >>= \case
+--         CESKStoreForward addrForward -> do
+--           go vars GCCycle
+--             { gcCycleEnv  = Map.insert var addrForward env
+--             , gcCycleCont = cont
+--             , gcCycleFrom = storeFrom
+--             , gcCycleTo   = storeTo
+--             }
+--         CESKStoreVal _color val -> do
+--           (to', addr') <- storeAlloc storeTo val CESKStoreGray
+--           from' <- storePutItem storeFrom addr $ CESKStoreForward addr'
+--           go vars GCCycle
+--             { gcCycleEnv  = Map.insert var addr' env
+--             , gcCycleCont = cont
+--             , gcCycleFrom = from'
+--             , gcCycleTo   = to'
+--             }
 
-    go [] env' from to =
-      (env', from, to)
-    go ((var, addr):vars) env' from to =
-      case ceskStoreGetItem from addr of
-        CESKStoreVal _color val ->
-          let
-            (to', addr') = ceskStoreAlloc to val CESKStoreGray
-            from' = ceskStorePutItem from addr $ CESKStoreForward addr'
-          in
-            go vars (Map.insert var addr' env') from' to'
-        CESKStoreForward addr' ->
-            go vars (Map.insert var addr' env') from to
+    -- go [] env' from to =
+    --   (env', from, to)
+    -- go ((var, addr):vars) env' from to =
+    --   case ceskStoreGetItem from addr of
+    --     CESKStoreVal _color val ->
+    --       let
+    --         (to', addr') = ceskStoreAlloc to val CESKStoreGray
+    --         from' = ceskStorePutItem from addr $ CESKStoreForward addr'
+    --       in
+    --         go vars (Map.insert var addr' env') from' to'
+    --     CESKStoreForward addr' ->
+    --         go vars (Map.insert var addr' env') from to
 
-ceskScavengeState :: GCCycle -> CESK GCCycle
-ceskScavengeState to = do
-  undefined
 
-ceskScavenge :: GCCycle -> CESK GCCycle
-ceskScavenge to = do
-  undefined
 
 
 {-
