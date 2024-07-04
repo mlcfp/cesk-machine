@@ -18,19 +18,10 @@ module Gen1.CESK
   , ceskExec
   , ceskGarbageCollect
   , ceskRun
-
-  -- , ceskStoreAlloc
-  -- , ceskStoreEmpty
-  -- , ceskStoreGetItem
-  -- , ceskStorePutItem
-
-  -- , initialStatistics
-  -- , initialState
-  -- , initialMachine
-
   , stateSpace
-  , storeEmpty
   , storeAlloc
+  , storeEmpty
+  , storePutVal
   ) where
 
 import Prelude hiding (exp)

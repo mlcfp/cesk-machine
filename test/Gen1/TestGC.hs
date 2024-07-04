@@ -17,18 +17,21 @@ tests :: Test
 tests = testGroup "GC"
   [ testOneEnv
   , testOneCont
-  -- , testContCycle
-  -- , testClosCycle
+  , testContCycle
+  , testClosCycle
   ]
 
-a0 :: CESKAddr
 a0 = CESKAddr 0
+a1 = CESKAddr 1
+a2 = CESKAddr 2
+aInt = ANFExpAtomic . ANFAtomicInt
+aBool = ANFExpAtomic . ANFAtomicBool
 
 testOneEnv :: Test
 testOneEnv = testCase "one env" $ do
   Right (addr, state, stateEvac, state') <- ceskDo $ do
     (store, addr) <- storeAlloc storeEmpty CESKValVoid CESKStoreWhite
-    let exp = ANFExpAtomic $ ANFAtomicBool False
+    let exp = aBool False
     let env = Map.fromList [(ANFVar "x", addr)]
     let state = CESKState exp env store CESKHalt
     (stateEvac, state') <- ceskGarbageCollect state
@@ -49,10 +52,9 @@ testOneCont = testCase "one cont" $ do
   let val = CESKValInt 6
   Right (addr, state, stateEvac, state') <- ceskDo $ do
     (store, addr) <- storeAlloc storeEmpty val CESKStoreWhite
-    let exp = ANFExpAtomic $ ANFAtomicBool False
+    let exp = aBool False
     let env = Map.fromList [(ANFVar "x", addr)]
-    cont <- pure $ CESKCont (ANFVar "y")
-      (ANFExpAtomic $ ANFAtomicInt 2) env CESKHalt
+    let cont = CESKCont (ANFVar "y") (aInt 2) env CESKHalt
     let state = CESKState exp env store cont
     (stateEvac, state') <- ceskGarbageCollect state
     pure (addr, state, stateEvac, state')
@@ -67,102 +69,109 @@ testOneCont = testCase "one cont" $ do
     (Map.fromList [(a0, CESKStoreForward a0)])
     (stateSpace stateEvac)
 
+testContCycle :: Test
+testContCycle = testCase "cont cycle" $ do
+  Right (state, stateEvac, state') <- ceskDo $ do
+    (store0, addr0) <- storeAlloc storeEmpty CESKValVoid CESKStoreWhite
+    (store1, addr1) <- storeAlloc store0 CESKValVoid CESKStoreWhite
+    (store2, addr2) <- storeAlloc store1 CESKValVoid CESKStoreWhite
+    let env = Map.fromList [(ANFVar "x", addr2)]
+    let env0 = Map.fromList [(ANFVar "x0", addr2)]
+    let env1 = Map.fromList [(ANFVar "x1", addr0)]
+    let env2 = Map.fromList [(ANFVar "x2", addr1)]
+    let cont0 = CESKCont (ANFVar "y0") (aInt 2) env0 CESKHalt
+    let cont1 = CESKCont (ANFVar "y1") (aInt 2) env1 CESKHalt
+    let cont2 = CESKCont (ANFVar "y2") (aInt 2) env2 CESKHalt
+    store3 <- storePutVal store2 addr0 (CESKValCont cont0)
+    store4 <- storePutVal store3 addr1 (CESKValCont cont1)
+    store5 <- storePutVal store4 addr2 (CESKValCont cont2)
+    state <- pure $ CESKState (aBool False)
+      env store5 CESKHalt
+    (stateEvac, state') <- ceskGarbageCollect state
+    pure (state, stateEvac, state')
+  assertEqual "store orig"
+    (Map.fromList
+      [ (a0, CESKStoreVal CESKStoreWhite
+          (CESKValCont (CESKCont (ANFVar "y0") (aInt 2)
+          (Map.fromList [(ANFVar "x0", a2)]) CESKHalt)))
+      , (a1, CESKStoreVal CESKStoreWhite
+          (CESKValCont (CESKCont (ANFVar "y1") (aInt 2)
+          (Map.fromList [(ANFVar "x1", a0)]) CESKHalt)))
+      , (a2, CESKStoreVal CESKStoreWhite
+          (CESKValCont (CESKCont (ANFVar "y2") (aInt 2)
+          (Map.fromList [(ANFVar "x2", a1)]) CESKHalt)))
+      ])
+    (stateSpace state)
+  assertEqual "store new"
+    (Map.fromList
+      [ (a0, CESKStoreVal CESKStoreWhite
+          (CESKValCont (CESKCont (ANFVar "y2") (aInt 2)
+          (Map.fromList [(ANFVar "x2", a1)]) CESKHalt)))
+      , (a1, CESKStoreVal CESKStoreWhite
+          (CESKValCont (CESKCont (ANFVar "y1") (aInt 2)
+          (Map.fromList [(ANFVar "x1", a2)]) CESKHalt)))
+      , (a2, CESKStoreVal CESKStoreWhite
+          (CESKValCont (CESKCont (ANFVar "y0") (aInt 2)
+          (Map.fromList [(ANFVar "x0", a0)]) CESKHalt)))
+      ])
+    (stateSpace state')
+  assertEqual "store old"
+    (Map.fromList
+      [ (a0, CESKStoreForward (a2))
+      , (a1, CESKStoreForward a1)
+      , (a2, CESKStoreForward a0)
+      ])
+    (stateSpace stateEvac)
 
-
--- testContCycle :: Test
--- testContCycle = testCase "cont cycle" $ do
---   assertEqual "store orig"
---     (Map.fromList
---       [ (Addr 1, StoreVal StoreWhite
---           (ValCont (Cont (Var "y0") (ExpAtomic (AExpInt 2))
---           (Map.fromList [(Var "x0", Addr 3)]) Halt)))
---       , (Addr 2, StoreVal StoreWhite
---           (ValCont (Cont (Var "y1") (ExpAtomic (AExpInt 2))
---           (Map.fromList [(Var "x1", Addr 1)]) Halt)))
---       , (Addr 3, StoreVal StoreWhite
---           (ValCont (Cont (Var "y2") (ExpAtomic (AExpInt 2))
---           (Map.fromList [(Var "x2", Addr 2)]) Halt)))
---       ])
---     (stateSpace state)
---   assertEqual "store new"
---     (Map.fromList
---       [ (Addr 1, StoreVal StoreWhite
---           (ValCont (Cont (Var "y2") (ExpAtomic (AExpInt 2))
---           (Map.fromList [(Var "x2", Addr 2)]) Halt)))
---       , (Addr 2, StoreVal StoreWhite
---           (ValCont (Cont (Var "y1") (ExpAtomic (AExpInt 2))
---           (Map.fromList [(Var "x1", Addr 3)]) Halt)))
---       , (Addr 3, StoreVal StoreWhite
---           (ValCont (Cont (Var "y0") (ExpAtomic (AExpInt 2))
---           (Map.fromList [(Var "x0", Addr 1)]) Halt)))
---       ])
---     (stateSpace state')
---   assertEqual "store old"
---     (Map.fromList
---       [ (Addr 1, StoreForward (Addr 3))
---       , (Addr 2, StoreForward (Addr 2))
---       , (Addr 3, StoreForward (Addr 1))
---       ])
---     (stateSpace stateEvac)
---   where
---     state = State (ExpAtomic AExpFalse) env store2 Halt
---     (stateEvac, state') = garbageCollect state
---     env = Map.fromList [(Var "x", addr2)]
---     env0 = Map.fromList [(Var "x0", addr2)]
---     env1 = Map.fromList [(Var "x1", addr0)]
---     env2 = Map.fromList [(Var "x2", addr1)]
---     cont0 = Cont (Var "y0") (ExpAtomic $ AExpInt 2) env0 Halt
---     cont1 = Cont (Var "y1") (ExpAtomic $ AExpInt 2) env1 Halt
---     cont2 = Cont (Var "y2") (ExpAtomic $ AExpInt 2) env2 Halt
---     (store0, addr0) = storeAlloc storeEmpty (ValCont cont0) StoreWhite
---     (store1, addr1) = storeAlloc store0 (ValCont cont1) StoreWhite
---     (store2, addr2) = storeAlloc store1 (ValCont cont2) StoreWhite
-
--- testClosCycle :: Test
--- testClosCycle = testCase "clos cycle" $ do
---   assertEqual "store orig"
---     (Map.fromList
---       [ (Addr 1, StoreVal StoreWhite
---           (ValClos (Lam [Var "a0"] (ExpAtomic (AExpInt 8)))
---           (Map.fromList [(Var "x0", Addr 3)])))
---       , (Addr 2, StoreVal StoreWhite
---           (ValClos (Lam [Var "a1"] (ExpAtomic (AExpInt 8)))
---           (Map.fromList [(Var "x1", Addr 1)])))
---       , (Addr 3, StoreVal StoreWhite
---           (ValClos (Lam [Var "a2"] (ExpAtomic (AExpInt 8)))
---           (Map.fromList [(Var "x2", Addr 2)])))
---       ])
---     (stateSpace state)
---   assertEqual "store new"
---     (Map.fromList
---       [ (Addr 1, StoreVal StoreWhite
---           (ValClos (Lam [Var "a2"] (ExpAtomic (AExpInt 8)))
---           (Map.fromList [(Var "x2", Addr 2)])))
---       , (Addr 2, StoreVal StoreWhite
---           (ValClos (Lam [Var "a1"] (ExpAtomic (AExpInt 8)))
---           (Map.fromList [(Var "x1", Addr 3)])))
---       , (Addr 3, StoreVal StoreWhite
---           (ValClos (Lam [Var "a0"] (ExpAtomic (AExpInt 8)))
---           (Map.fromList [(Var "x0", Addr 1)])))
---       ])
---     (stateSpace state')
---   assertEqual "store old"
---     (Map.fromList
---       [ (Addr 1, StoreForward (Addr 3))
---       , (Addr 2, StoreForward (Addr 2))
---       , (Addr 3, StoreForward (Addr 1))
---       ])
---     (stateSpace stateEvac)
---   where
---     state = State (ExpAtomic AExpFalse) env store2 Halt
---     (stateEvac, state') = garbageCollect state
---     env = Map.fromList [(Var "x", addr2)]
---     env0 = Map.fromList [(Var "x0", addr2)]
---     env1 = Map.fromList [(Var "x1", addr0)]
---     env2 = Map.fromList [(Var "x2", addr1)]
---     clos0 = ValClos (Lam [Var "a0"] $ ExpAtomic $ AExpInt 8) env0
---     clos1 = ValClos (Lam [Var "a1"] $ ExpAtomic $ AExpInt 8) env1
---     clos2 = ValClos (Lam [Var "a2"] $ ExpAtomic $ AExpInt 8) env2
---     (store0, addr0) = storeAlloc storeEmpty clos0 StoreWhite
---     (store1, addr1) = storeAlloc store0 clos1 StoreWhite
---     (store2, addr2) = storeAlloc store1 clos2 StoreWhite
+testClosCycle :: Test
+testClosCycle = testCase "clos cycle" $ do
+  Right (state, stateEvac, state') <- ceskDo $ do
+    (store0, addr0) <- storeAlloc storeEmpty CESKValVoid CESKStoreWhite
+    (store1, addr1) <- storeAlloc store0 CESKValVoid CESKStoreWhite
+    (store2, addr2) <- storeAlloc store1 CESKValVoid CESKStoreWhite
+    let env = Map.fromList [(ANFVar "x", addr2)]
+    let env0 = Map.fromList [(ANFVar "x0", addr2)]
+    let env1 = Map.fromList [(ANFVar "x1", addr0)]
+    let env2 = Map.fromList [(ANFVar "x2", addr1)]
+    let clos0 = CESKValClos (ANFLam [ANFVar "a0"] $ aInt 8) env0
+    let clos1 = CESKValClos (ANFLam [ANFVar "a1"] $ aInt 8) env1
+    let clos2 = CESKValClos (ANFLam [ANFVar "a2"] $ aInt 8) env2
+    store3 <- storePutVal store2 addr0 clos0
+    store4 <- storePutVal store3 addr1 clos1
+    store5 <- storePutVal store4 addr2 clos2
+    let state = CESKState (aBool False) env store5 CESKHalt
+    (stateEvac, state') <- ceskGarbageCollect state
+    pure (state, stateEvac, state')
+  assertEqual "store orig"
+    (Map.fromList
+      [ (a0, CESKStoreVal CESKStoreWhite
+          (CESKValClos (ANFLam [ANFVar "a0"] (aInt 8))
+          (Map.fromList [(ANFVar "x0", a2)])))
+      , (a1, CESKStoreVal CESKStoreWhite
+          (CESKValClos (ANFLam [ANFVar "a1"] (aInt 8))
+          (Map.fromList [(ANFVar "x1", a0)])))
+      , (a2, CESKStoreVal CESKStoreWhite
+          (CESKValClos (ANFLam [ANFVar "a2"] (aInt 8))
+          (Map.fromList [(ANFVar "x2", a1)])))
+      ])
+    (stateSpace state)
+  assertEqual "store new"
+    (Map.fromList
+      [ (a0, CESKStoreVal CESKStoreWhite
+          (CESKValClos (ANFLam [ANFVar "a2"] (aInt 8))
+          (Map.fromList [(ANFVar "x2", a1)])))
+      , (a1, CESKStoreVal CESKStoreWhite
+          (CESKValClos (ANFLam [ANFVar "a1"] (aInt 8))
+          (Map.fromList [(ANFVar "x1", a2)])))
+      , (a2, CESKStoreVal CESKStoreWhite
+          (CESKValClos (ANFLam [ANFVar "a0"] (aInt 8))
+          (Map.fromList [(ANFVar "x0", a0)])))
+      ])
+    (stateSpace state')
+  assertEqual "store old"
+    (Map.fromList
+      [ (a0, CESKStoreForward a2)
+      , (a1, CESKStoreForward a1)
+      , (a2, CESKStoreForward a0)
+      ])
+    (stateSpace stateEvac)
