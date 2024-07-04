@@ -16,6 +16,7 @@ tests :: Test
 tests = testGroup "ANF"
   [ testParseInt
   , testParseBool
+  , testParseVoid
   , testParseStr
   , testParseFloat
   , testParseVar
@@ -43,6 +44,15 @@ testParseBool = testCase "bool" $ do
   assertEqual "bool false"
     (Right $ expProg $ ANFExpAtomic $ ANFAtomicBool False)
     (anfParse "#f")
+
+testParseVoid :: Test
+testParseVoid = testCase "void" $ do
+  assertEqual "void 1"
+    (Right $ expProg $ ANFExpAtomic $ ANFAtomicVoid)
+    (anfParse "#v")
+  assertEqual "void 2"
+    (Right $ expProg $ ANFExpAtomic $ ANFAtomicVoid)
+    (anfParse "#void")
 
 testParseStr :: Test
 testParseStr = testCase "str" $ do
@@ -166,16 +176,17 @@ expProg :: ANFExp -> ANFProg
 expProg exp = ANFProg [ANFDecExp exp]
 
 factorialProg = anfParse [r|
-      #|
-      factorial
-      |#
-      (define f
-        (λ (n)
-          (let ((g1 (= n 0)))
-            (if g1
-              1
-              (let ((g2 (- n 1)))
-                (let ((g3 (f g2)))
-                  (* n g3)))))))
-      ; factorial for 20
-      (f 20)|]
+  #|
+  factorial
+  |#
+  (define f
+    (λ (n)
+      (let ((g1 (= n 0)))
+        (if g1
+          1
+          (let ((g2 (- n 1)))
+            (let ((g3 (f g2)))
+              (* n g3)))))))
+  ; factorial for 20
+  (f 20)
+|]

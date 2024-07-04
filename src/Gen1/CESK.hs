@@ -6,17 +6,31 @@ module Gen1.CESK
   ( CESKAddr(..)
   , CESKCont(..)
   , CESKEnv
+  , CESKMachine(..)
   , CESKState(..)
+  , CESKStatistics(..)
   , CESKStore(..)
   , CESKStoreColor(..)
   , CESKStoreItem(..)
   , CESKStoreSpace
   , CESKVal(..)
+  , ceskDo
+  , ceskExec
+  , ceskGarbageCollect
   , ceskRun
-  , ceskStoreAlloc
-  , ceskStoreEmpty
-  , ceskStoreGetItem
-  , ceskStorePutItem
+
+  -- , ceskStoreAlloc
+  -- , ceskStoreEmpty
+  -- , ceskStoreGetItem
+  -- , ceskStorePutItem
+
+  -- , initialStatistics
+  -- , initialState
+  -- , initialMachine
+
+  , stateSpace
+  , storeEmpty
+  , storeAlloc
   ) where
 
 import Prelude hiding (exp)
@@ -26,7 +40,7 @@ import qualified Data.Map.Strict as Map
 import Data.Maybe (fromJust)
 import Data.Text (Text)
 import qualified Data.Text as T
-import Control.Monad (forM, forM_)
+import Control.Monad (forM, forM_, when)
 import Control.Monad.Except (ExceptT(..), runExceptT, throwError)
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.State (StateT(..), evalStateT, get, gets, put, modify)
@@ -34,9 +48,23 @@ import Gen1.ANF
 import Gen1.Util
 
 -- | Defines the execution monad.
-type CESK = ExceptT Text (StateT CESKState IO)
+type CESK = ExceptT Text (StateT CESKMachine IO)
 
--- | Defines a machine state.
+-- | Defines the evaluation state.
+data CESKMachine = CESKMachine
+  { ceskMachineStatistics :: CESKStatistics
+  , ceskMachineState      :: CESKState
+  } deriving (Eq, Ord, Show)
+
+-- | Defines various statistics used to monitor and control
+-- the machine.
+data CESKStatistics = CESKStatistics
+  { ceskStepCountLimit :: Integer
+  , ceskStepCountGC    :: Integer
+  , ceskStepCountTotal :: Integer
+  } deriving (Eq, Ord, Show)
+
+-- | Defines a CESK machine state.
 data CESKState = CESKState
   { ceskStateExp   :: ANFExp
   , ceskStateEnv   :: CESKEnv
@@ -89,55 +117,91 @@ data CESKVal
   | CESKValCont CESKCont
     deriving (Eq, Ord, Show)
 
-data CESKStats = CESKStats
-  { ceskStepCount      :: Integer
-  , ceskStepCountGC    :: Integer
-  , ceskStepCountTotal :: Integer
+-- TODO change to default instance
+initialStatistics :: CESKStatistics
+initialStatistics = CESKStatistics
+  { ceskStepCountLimit = 200
+  , ceskStepCountGC    = 0
+  , ceskStepCountTotal = 0
   }
 
--- runProg :: ANFProg -> CESKVal
--- runProg prog =
---   case x of
---     CESKState (ANFExpAtomic aexp) env store _ ->
---       evalAtomic env store aexp
---     _otherwise ->
---       error "non-atomic result"
---   where
---     finalState = evalProg (inject prog)
+initialState :: CESKState
+initialState = CESKState
+  { ceskStateExp   = ANFExpAtomic ANFAtomicVoid
+  , ceskStateEnv   = ceskEnvEmpty
+  , ceskStateStore = ceskStoreEmpty
+  , ceskStateCont  = CESKHalt
+  }
 
---     -- TODO move garbage collect into eval on some interval
---     (_, x) = ceskGarbageCollect finalState
+initialMachine :: CESKMachine
+initialMachine = CESKMachine
+  { ceskMachineStatistics = initialStatistics
+  , ceskMachineState      = initialState
+  }
+
+-- | Extracts the space from a state.
+stateSpace :: CESKState -> CESKStoreSpace
+stateSpace CESKState{..} = ceskStoreSpace ceskStateStore
+
+-- | Modifies the machine statistics.
+modifyStatistics :: (CESKStatistics -> CESKStatistics) -> CESK ()
+modifyStatistics f = modify $ \s -> s
+  { ceskMachineStatistics = f $ ceskMachineStatistics s }
+
+-- | Modifies the machine state.
+modifyState :: (CESKState -> CESKState) -> CESK ()
+modifyState f = modify $ \s -> s
+  { ceskMachineState = f $ ceskMachineState s }
 
 -- | Runs an ANF program source code.
 ceskRun :: Text -> IO (Either Text CESKVal)
 ceskRun source =
-  evalStateT (runExceptT $ ceskEval source) $ CESKState
-    { ceskStateExp   = ANFExpAtomic (ANFAtomicInt 0) -- TODO make this a void
-    , ceskStateEnv   = ceskEnvEmpty
-    , ceskStateStore = ceskStoreEmpty
-    , ceskStateCont  = CESKHalt
-    }
-
--- | Evaluates an ANF source program to a final value
--- under a CESK machine monad.
-ceskEval :: Text -> CESK CESKVal
-ceskEval source = do
   case anfParse source of
     Right prog -> do
-      ceskInject prog
-      ceskLoop
+      ceskExec prog
     Left e -> do
-      throwError e
+      pure $ Left e
+
+-- | Runs an ANF program AST.
+ceskExec :: ANFProg -> IO (Either Text CESKVal)
+ceskExec = ceskDo . ceskEval
+
+-- | Runs a CESK monad.
+ceskDo :: CESK a -> IO (Either Text a)
+ceskDo x = evalStateT (runExceptT x) initialMachine
+
+-- | Evaluates an ANF program to a final value
+-- under a CESK machine monad.
+ceskEval :: ANFProg -> CESK CESKVal
+ceskEval prog = do
+  ceskInject prog
+  ceskLoop
 
 -- | Loops over the steps until program evalutation is complete.
-ceskLoop :: CESKStats -> CESK (CESKStats, CESKVal)
+ceskLoop :: CESK CESKVal
 ceskLoop = do
-  CESKState{..} <- get
+  CESKState{..} <- gets ceskMachineState
   case ceskStateExp of
     ANFExpAtomic aexp | ceskStateCont == CESKHalt -> do
       evalAtomic aexp
     _otherwise -> do
-      ceskStep >> ceskLoop
+      ceskStep >> ceskAdmin >> ceskLoop
+
+-- | Perform interstep machine administration.
+ceskAdmin :: CESK ()
+ceskAdmin = do
+  -- Increment the program counters.
+  modifyStatistics $ \s -> s
+    { ceskStepCountGC    = 1 + ceskStepCountGC s
+    , ceskStepCountTotal = 1 + ceskStepCountTotal s
+    }
+  CESKStatistics{..} <- gets ceskMachineStatistics
+  -- Check if it is time to empty the trash.
+  when (ceskStepCountGC >= ceskStepCountLimit) $ do
+    state <- gets ceskMachineState
+    (_, state') <- ceskGarbageCollect state
+    modifyState $ const $ state'
+    modifyStatistics $ \s -> s { ceskStepCountGC = 0 }
 
 -- | Sets an ANF program as the initial state for the CESK machine.
 ceskInject :: ANFProg -> CESK ()
@@ -146,7 +210,7 @@ ceskInject (ANFProg decs) = do
   -- Find the main entry expression.
   case [exp | ANFDecExp exp <- decs] of
     (exp:[]) -> do
-      modify $ \s -> s
+      modifyState $ \s -> s
         { ceskStateExp = exp
         , ceskStateCont = CESKHalt
         }
@@ -159,7 +223,14 @@ ceskInject (ANFProg decs) = do
 ceskInitDecs :: [ANFDec] -> CESK ()
 ceskInitDecs = mapM_ $ \case
   ANFDecDefine var (ANFExpAtomic (ANFAtomicLam lam)) -> do
-    ceskPutVar var $ CESKValClos lam ceskEnvEmpty
+    -- Support recursion in definitions by defining the variable
+    -- first, capturing the environment with the variable, and
+    -- then put the closure in storage with the updated environment.
+    -- This is essentially a top-level letrec.
+    ceskPutVar var CESKValVoid
+    addr <- ceskEnvGet var
+    clo <- CESKValClos lam . ceskStateEnv <$> gets ceskMachineState
+    ceskStorePutVal addr clo
   ANFDecDefine var (ANFExpAtomic (ANFAtomicBool x)) -> do
     ceskPutVar var $ CESKValBool x
   ANFDecDefine var (ANFExpAtomic (ANFAtomicInt x)) -> do
@@ -175,12 +246,14 @@ ceskInitDecs = mapM_ $ \case
 evalAtomic :: ANFAtomic -> CESK CESKVal
 evalAtomic atomic = do
   case atomic of
+    ANFAtomicVoid ->
+      pure CESKValVoid
     ANFAtomicInt x -> do
       pure $ CESKValInt x
     ANFAtomicBool x -> do
       pure $ CESKValBool x
     ANFAtomicLam lam -> do
-      CESKValClos lam <$> gets ceskStateEnv
+      CESKValClos lam . ceskStateEnv <$> gets ceskMachineState
     ANFAtomicVar var -> do
       ceskGetVar var
     ANFAtomicPrim ANFPrimAdd [aexp1, aexp2] ->
@@ -212,59 +285,39 @@ evalCompareInt f aexp1 aexp2 = do
   CESKValInt y <- evalAtomic aexp2
   pure . CESKValBool $ f x y
 
-
 -- | Steps the machine from the current state to the next.
 ceskStep :: CESK ()
 ceskStep = do
-  CESKState exp env store cont <- get
+  CESKState exp env store cont <- gets ceskMachineState
   case exp of
     ANFExpLet var exp0 exp1 -> do
-      put $ CESKState exp0 env store $ CESKCont var exp1 env cont
+      modifyState $ const $
+        CESKState exp0 env store $ CESKCont var exp1 env cont
     ANFExpAtomic aexp -> do
       evalAtomic aexp >>= ceskApplyCont
     ANFExpComplex (ANFComplexApp aexps) ->
       case aexps of
         (arg0:arg1:args) -> do
-          -- let
-          --   proc = evalAtomic env store arg0
-          --   vals = evalAtomic env store <$> (arg1:args)
-          -- in
-          --   ceskApplyProc proc vals store cont
           proc <- evalAtomic arg0
           vals <- forM (arg1:args) evalAtomic
           ceskApplyProc proc vals
         _otherwise ->
           throwError "bad application"
     ANFExpComplex (ANFComplexIf aexp exp0 exp1) -> do
-      -- case evalAtomic env store aexp of
-      --   CESKValBool True -> CESKState exp0 env store cont
-      --   CESKValBool False -> CESKState exp1 env store cont
-      --   _otherwise -> error "bad if expression"
       evalAtomic aexp >>= \case
-        CESKValBool True -> put $ CESKState exp0 env store cont
-        CESKValBool False -> put $ CESKState exp1 env store cont
-        _otherwise -> throwError "bad if expression"
-
+        CESKValBool True ->
+          modifyState $ const $ CESKState exp0 env store cont
+        CESKValBool False ->
+          modifyState $ const $ CESKState exp1 env store cont
+        _otherwise ->
+          throwError "bad if expression"
     ANFExpComplex (ANFComplexCallCC aexp) -> do
-      -- let
-      --   proc = evalAtomic env store aexp
-      --   valcc = CESKValCont cont
-      -- in
-      --   ceskApplyProc proc [valcc] store cont
       f <- evalAtomic aexp
       ceskApplyProc f [CESKValCont cont]
     ANFExpComplex (ANFComplexSet var aexp) -> do
       addr <- ceskEnvGet var
       evalAtomic aexp >>= ceskStorePutVal addr
       ceskApplyCont CESKValVoid
-
-      -- let
-      --   addr = fromJust $ Map.lookup var env
-      --   val = evalAtomic env store aexp
-      --   store' = ceskStorePutVal store addr val
-      -- in
-      --   ceskApplyCont cont CESKValVoid store'
-
     ANFExpComplex (ANFComplexLetRec bindings body) -> do
       (vars, vals) <- pure $ unzip $
         map (\(ANFBind var _) -> (var, CESKValVoid)) bindings
@@ -272,25 +325,14 @@ ceskStep = do
       vals' <- forM bindings $ \(ANFBind _ aexp) -> evalAtomic aexp
       addrs <- forM vars ceskEnvGet
       forM_ (zip addrs vals') $ \(a, v) -> ceskStorePutVal a v
-      modify $ \s -> s { ceskStateExp = body }
-      -- CESKState{..} <- get
-      -- let ceskStateExp = body
-      -- put CESKState{..}
-      -- let
-      --   (vars, vals) = unzip $ map (\(ANFBind var _) -> (var, CESKValVoid)) bindings
-      --   (env', store') = ceskPutVars vars vals env store
-      --   vals' = map (\(ANFBind _ aexp) -> evalAtomic env' store' aexp) bindings
-      --   addrs = map (\var -> fromJust $ Map.lookup var env') vars
-      --   store'' = foldl (\s (a, v) -> ceskStorePutVal s a v) store' $ zip addrs vals'
-      -- in
-      --   CESKState body env' store'' cont
+      modifyState $ \s -> s { ceskStateExp = body }
 
 -- | Applies a procedure.
 ceskApplyProc :: CESKVal -> [CESKVal] -> CESK ()
 ceskApplyProc val vals = do
   case val of
     CESKValClos (ANFLam vars exp) env -> do
-      modify $ \s -> s
+      modifyState $ \s -> s
         { ceskStateExp = exp
         , ceskStateEnv = env
         }
@@ -301,10 +343,10 @@ ceskApplyProc val vals = do
 -- | Applies a continuation.
 ceskApplyCont :: CESKVal -> CESK ()
 ceskApplyCont val = do
-  CESKState{..} <- get
+  CESKState{..} <- gets ceskMachineState
   case ceskStateCont of
     CESKCont var exp env cont -> do
-      modify $ \s -> s
+      modifyState $ \s -> s
         { ceskStateExp = exp
         , ceskStateEnv = env
         , ceskStateCont = cont
@@ -320,15 +362,15 @@ ceskEnvEmpty = envEmpty
 -- | Gets the address for a variable from the current environment.
 ceskEnvGet :: ANFVar -> CESK CESKAddr
 ceskEnvGet var = do
-  CESKState{..} <- get
+  CESKState{..} <- gets ceskMachineState
   envGet ceskStateEnv var
 
 -- | Puts a variable in the current environment.
 ceskEnvPut :: ANFVar -> CESKAddr -> CESK ()
 ceskEnvPut var addr = do
-  CESKState{..} <- get
+  CESKState{..} <- gets ceskMachineState
   env <- envPut ceskStateEnv var addr
-  modify $ \s -> s { ceskStateEnv = env }
+  modifyState $ \s -> s { ceskStateEnv = env }
 
 -- | Defines an empty environment.
 envEmpty :: CESKEnv
@@ -342,7 +384,8 @@ envPut env var addr = do
 -- | Gets the address for a variable from the current environment.
 envGet :: CESKEnv -> ANFVar -> CESK CESKAddr
 envGet env var = do
-  maybe (throwError $ "bad var " <> textShow var) pure $ Map.lookup var env
+  maybe (throwError $ "bad var " <> textShow var) pure $
+    Map.lookup var env
 
 -- | Gets the value for a variable.
 ceskGetVar :: ANFVar -> CESK CESKVal
@@ -369,42 +412,42 @@ ceskStoreEmpty = storeEmpty
 -- | Allocates a value in the store and returns its address.
 ceskStoreAlloc :: CESKVal -> CESKStoreColor -> CESK CESKAddr
 ceskStoreAlloc val color = do
-  CESKState{..} <- get
+  CESKState{..} <- gets ceskMachineState
   (store, addr) <- storeAlloc ceskStateStore val color
-  modify $ \s -> s { ceskStateStore = store }
+  modifyState $ \s -> s { ceskStateStore = store }
   pure addr
 
 -- | Frees a value from the store.
 ceskStoreFree :: CESKAddr -> CESK ()
 ceskStoreFree addr = do
-  CESKState{..} <- get
+  CESKState{..} <- gets ceskMachineState
   store <- storeFree ceskStateStore addr
-  modify $ \s -> s { ceskStateStore = store }
+  modifyState $ \s -> s { ceskStateStore = store }
 
 -- | Updates the value at an address in the store.
 ceskStorePutVal :: CESKAddr -> CESKVal -> CESK ()
 ceskStorePutVal addr val = do
-  CESKState{..} <- get
+  CESKState{..} <- gets ceskMachineState
   store <- storePutVal ceskStateStore addr val
-  modify $ \s -> s { ceskStateStore = store }
+  modifyState $ \s -> s { ceskStateStore = store }
 
 -- | Updates a store item at an address in the store.
 ceskStorePutItem :: CESKAddr -> CESKStoreItem -> CESK ()
 ceskStorePutItem addr item = do
-  CESKState{..} <- get
+  CESKState{..} <- gets ceskMachineState
   store <- storePutItem ceskStateStore addr item
-  modify $ \s -> s { ceskStateStore = store }
+  modifyState $ \s -> s { ceskStateStore = store }
 
 -- | Gets a value from the store.
 ceskStoreGetVal :: CESKAddr -> CESK CESKVal
 ceskStoreGetVal addr = do
-  CESKState{..} <- get
+  CESKState{..} <- gets ceskMachineState
   storeGetVal ceskStateStore addr
 
 -- | Gets an item from the store.
 ceskStoreGetItem :: CESKAddr -> CESK CESKStoreItem
 ceskStoreGetItem addr = do
-  CESKState{..} <- get
+  CESKState{..} <- gets ceskMachineState
   storeGetItem ceskStateStore addr
 
 -- | Defines an empty store.
@@ -568,148 +611,3 @@ ceskColor (CESKState exp env (CESKStore space supply size) cont) color = do
     CESKStoreForward _ -> do
       throwError "forward found while recoloring"
   pure $ CESKState exp env (CESKStore space' supply size) cont
-
-
--- ceskEvacuateEnv :: GCCycle -> CESK GCCycle
--- ceskEvacuateEnv cycle = do
---   go (Map.toAscList $ gcCycleEnv cycle) cycle
---   where
---     -- go :: [(ANFVar,CESKAddr)] -> GCCycle -> CESK GCCycle
---     go [] cycle = do
---       pure cycle
---     go ((var, addr):vars) (GCCycle env cont storeFrom storeTo) = do
---       storeGetItem storeFrom addr >>= \case
---         CESKStoreForward addrForward -> do
---           go vars GCCycle
---             { gcCycleEnv  = Map.insert var addrForward env
---             , gcCycleCont = cont
---             , gcCycleFrom = storeFrom
---             , gcCycleTo   = storeTo
---             }
---         CESKStoreVal _color val -> do
---           (to', addr') <- storeAlloc storeTo val CESKStoreGray
---           from' <- storePutItem storeFrom addr $ CESKStoreForward addr'
---           go vars GCCycle
---             { gcCycleEnv  = Map.insert var addr' env
---             , gcCycleCont = cont
---             , gcCycleFrom = from'
---             , gcCycleTo   = to'
---             }
-
-    -- go [] env' from to =
-    --   (env', from, to)
-    -- go ((var, addr):vars) env' from to =
-    --   case ceskStoreGetItem from addr of
-    --     CESKStoreVal _color val ->
-    --       let
-    --         (to', addr') = ceskStoreAlloc to val CESKStoreGray
-    --         from' = ceskStorePutItem from addr $ CESKStoreForward addr'
-    --       in
-    --         go vars (Map.insert var addr' env') from' to'
-    --     CESKStoreForward addr' ->
-    --         go vars (Map.insert var addr' env') from to
-
-
-
-
-{-
-
--- | Changes the collection color of a state.
--- The supplied state is expected to be all black at this point,
--- so recolor also acts as a validator of this requirement.
-recolor :: CESKStoreColor -> CESKState -> CESKState
-recolor color (CESKState exp env (CESKStore space supply size) cont) =
-  (CESKState exp env (CESKStore space' supply size) cont)
-  where
-    space' = Map.map colorItem space
-    colorItem = \case
-      CESKStoreVal CESKStoreBlack val -> CESKStoreVal color val
-      CESKStoreVal badColor _ -> error $ "bad color " <> show badColor
-      CESKStoreForward _ -> error "forward found while recoloring"
-
--- | Evacuates a state.
--- All the root items (those external to the store) are located
--- and copied to the new state "to-space".
-evacuateState :: CESKState -> (CESKState, CESKState)
-evacuateState (CESKState exp env store cont) =
-  (CESKState exp env from'' cont', CESKState exp env' to'' cont')
-  where
-    (env', from', to') = evacuateEnv env store ceskStoreEmpty
-    (cont', from'', to'') = evacuateCont cont from' to'
-
--- | Evacuates a continuation.
-evacuateCont :: CESKCont -> CESKStore -> CESKStore -> (CESKCont, CESKStore, CESKStore)
-evacuateCont = go
-  where
-    -- go :: CESKCont -> CESKStore -> CESKStore -> (CESKCont, CESKStore, CESKStore)
-    go CESKHalt storeFrom storeTo =
-      (CESKHalt, storeFrom, storeTo)
-    go (CESKCont var exp env cont) storeFrom storeTo =
-      let
-        (env', from0, to0) = evacuateEnv env storeFrom storeTo
-        (cont', from', to') = go cont from0 to0
-      in
-        (CESKCont var exp env' cont', from', to')
-
--- | Evacuates an environment.
-evacuateEnv :: CESKEnv -> CESKStore -> CESKStore -> (CESKEnv, CESKStore, CESKStore)
-evacuateEnv env =
-  go (Map.toAscList env) env
-  where
-    go [] env' from to =
-      (env', from, to)
-    go ((var, addr):vars) env' from to =
-      case ceskStoreGetItem from addr of
-        CESKStoreVal _ val ->
-          let
-            (to', addr') = ceskStoreAlloc to val CESKStoreGray
-            from' = ceskStorePutItem from addr $ CESKStoreForward addr'
-          in
-            go vars (Map.insert var addr' env') from' to'
-        CESKStoreForward addr' ->
-            go vars (Map.insert var addr' env') from to
-
--- | Scavenges a state.
--- The state store is searched for additional items that need to
--- be moved to "to-space".
-scavengeState :: CESKState -> CESKState -> (CESKState, CESKState)
-scavengeState stateFrom stateTo =
-  ( CESKState exp0 env0 store0' cont0
-  , CESKState exp1 env1 store1' cont1
-  )
-  where
-    (CESKState exp0 env0 store0 cont0) = stateFrom
-    (CESKState exp1 env1 store1 cont1) = stateTo
-    (store0', store1') = scavenge store0 store1
-
--- | Scavenges a store.
-scavenge :: CESKStore -> CESKStore -> (CESKStore, CESKStore)
-scavenge storeFrom storeTo =
-  case grayItem of
-    Just (addr, CESKStoreVal _ (CESKValClos lam env)) ->
-      let
-        (env', from', to') = evacuateEnv env storeFrom storeTo
-        to'' = ceskStorePutItem to' addr $ CESKStoreVal CESKStoreBlack $ CESKValClos lam env'
-      in
-        scavenge from' to''
-    Just (addr, CESKStoreVal _ (CESKValCont cont)) ->
-      let
-        (cont', from', to') = evacuateCont cont storeFrom storeTo
-        to'' = ceskStorePutItem to' addr $ CESKStoreVal CESKStoreBlack $ CESKValCont cont'
-      in
-        scavenge from' to''
-    Just (addr, CESKStoreVal _ val) ->
-      let
-        to' = ceskStorePutItem storeTo addr $ CESKStoreVal CESKStoreBlack val
-      in
-        scavenge storeFrom to'
-    Just (_, CESKStoreForward _) ->
-      error "forward found while scavenging"
-    Nothing ->
-      (storeFrom, storeTo)
-  where
-    isGray (CESKStoreVal CESKStoreGray _) = True
-    isGray _ = False
-    (grayMap, _) = Map.partition isGray $ ceskStoreSpace storeTo
-    grayItem = Map.lookupMin grayMap
--}

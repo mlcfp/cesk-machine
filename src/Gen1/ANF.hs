@@ -82,11 +82,12 @@ data ANFExp
 data ANFAtomic
   = ANFAtomicLam ANFLam
   | ANFAtomicVar ANFVar
+  | ANFAtomicPrim ANFPrim [ANFAtomic]
   | ANFAtomicBool Bool
   | ANFAtomicInt Integer
   | ANFAtomicFloat Double
   | ANFAtomicStr Text
-  | ANFAtomicPrim ANFPrim [ANFAtomic]
+  | ANFAtomicVoid
     deriving (Eq, Ord, Show)
 
 -- | Defines a complex expression.
@@ -158,6 +159,7 @@ parseExp = choice
 parseAtomic :: Parser ANFAtomic
 parseAtomic = choice
   [ try $ ANFAtomicBool <$> parseBool
+  , try $ ANFAtomicVoid <$ parseVoid
   , try $ ANFAtomicVar <$> parseVar
   , try $ ANFAtomicFloat <$> parseDouble
   , try $ ANFAtomicInt <$> parseInteger
@@ -259,11 +261,15 @@ parseBool = try (True <$ parseTrue) <|> (False <$ parseFalse)
 
 -- | Parses a true literal.
 parseTrue :: Parser ()
-parseTrue = void $ try (parseSymbol "#t") <|> parseSymbol "#true"
+parseTrue = void $ try (parseSymbol "#true") <|> parseSymbol "#t"
 
 -- | Parses a false literal.
 parseFalse :: Parser ()
-parseFalse = void $ try (parseSymbol "#f") <|> parseSymbol "#false"
+parseFalse = void $ try (parseSymbol "#false") <|> parseSymbol "#f"
+
+-- | Parses a void literal.
+parseVoid :: Parser ()
+parseVoid = void $ try (parseSymbol "#void") <|> parseSymbol "#v"
 
 -- | Defines the render style.
 data ANFRenderStyle
@@ -364,6 +370,8 @@ renderAtomic = \case
     renderText "#t"
   ANFAtomicBool False -> do
     renderText "#f"
+  ANFAtomicVoid -> do
+    renderText "#void"
   ANFAtomicStr x -> do
     renderText "\""
     renderText x

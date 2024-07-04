@@ -6,7 +6,10 @@ module Gen1.TestCESK
   ( tests
   ) where
 
+import qualified Data.Text as T
 import Gen1.CESK
+import Gen1.Normalize
+import Gen1.Scheme
 import Test.Framework (Test, testGroup)
 import Test.Framework.Providers.HUnit (testCase)
 import Test.HUnit (assertEqual)
@@ -18,7 +21,7 @@ tests = testGroup "CESK"
   , testVar
   , testMath
   , testDefine
-  , testProgFactorial
+  , testANFFactorial
   ]
 
 testVal :: Test
@@ -72,8 +75,8 @@ testDefine = testCase "define" $ do
     |] >>=
       assertEqual "define 3" (Right $ CESKValInt 16)
 
-testProgFactorial :: Test
-testProgFactorial = testCase "factorial" $ do
+testANFFactorial :: Test
+testANFFactorial = testCase "anf factorial" $ do
   ceskRun [r|
     #| factorial version 1 |#
     (letrec ((f
@@ -85,7 +88,8 @@ testProgFactorial = testCase "factorial" $ do
               (let ((g3 (f g2)))
                 (* n g3))))))))
     ; factorial for 20
-    (f 20))|] >>=
+    (f 20))
+  |] >>=
       assertEqual "ver 1" (Right $ CESKValInt 2432902008176640000)
   ceskRun [r|
     (define factorial (λ (x)
@@ -102,3 +106,14 @@ testProgFactorial = testCase "factorial" $ do
       (factorial r0))
   |] >>=
     assertEqual "ver 2" (Right $ CESKValInt 720)
+  ceskRun [r|
+    (define f (λ (n)
+      (let ((g0 (= n 0)))
+        (if g0
+          1
+          (let ((g1 (- n 1)))
+            (let ((g2 (f g1)))
+              (* n g2)))))))
+    (f 11)
+  |] >>=
+    assertEqual "ver 2" (Right $ CESKValInt 39916800)

@@ -7,6 +7,8 @@ module Gen1.TestScheme
   ) where
 
 import qualified Data.Text as T
+import Gen1.CESK
+import Gen1.Normalize
 import Gen1.Scheme
 import Test.Framework (Test, testGroup)
 import Test.Framework.Providers.HUnit (testCase)
@@ -17,6 +19,7 @@ tests :: Test
 tests = testGroup "Gen1.Scheme"
   [ testParseFactorial
   , testPrintFactorial
+  , testRunFactorial
   ]
 
 testParseFactorial :: Test
@@ -93,3 +96,34 @@ factorialNormal = "\
   \(define f (λ (n) (let ((g1 (= n 0))) \
   \(if g1 1 (let ((g2 (- n 1))) (let ((g3 (f g2))) \
   \(* n g3))))))) (f 20)"
+
+testRunFactorial :: Test
+testRunFactorial = testCase "run factorial" $ do
+  let r = Right $ CESKValInt 2432902008176640000
+  schemeRun factorialScheme >>= assertEqual "run" r
+  -- schemeExec factorialScheme >>= assertEqual "exec" r
+
+factorialScheme = [r|
+  (define (factorial n)
+    (if (= n 0) 1
+        (* n (factorial (- n 1)))))
+  (factorial 20)
+|]
+
+schemeRun code = do
+  case schemeParse code of
+    Left err -> do
+      error $ T.unpack err
+    Right prog -> do
+      prog' <- normalizeProg prog
+      code' <- schemeRender renderOptions prog'
+      ceskRun code'
+
+-- TODO the scheme AST to ANF AST conversion is needed for this
+-- schemeExec code = do
+--   case schemeParse code of
+--     Left err -> do
+--       error $ T.unpack err
+--     Right prog -> do
+--       prog' <- normalizeProg prog
+--       ceskExec prog'

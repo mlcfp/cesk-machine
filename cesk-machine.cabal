@@ -55,7 +55,6 @@ library
   build-depends:
       base >=4.7 && <5
     , containers
-    , data-default
     , either
     , megaparsec
     , mtl
@@ -89,7 +88,6 @@ executable cesk-machine
       base >=4.7 && <5
     , cesk-machine
     , containers
-    , data-default
     , either
     , megaparsec
     , mtl
@@ -108,6 +106,7 @@ test-suite cesk-machine-test
       Gen0.TestGC
       Gen1.TestANF
       Gen1.TestCESK
+      Gen1.TestGC
       Gen1.TestNormalize
       Gen1.TestScheme
       Paths_cesk_machine
@@ -133,7 +132,6 @@ test-suite cesk-machine-test
     , base >=4.7 && <5
     , cesk-machine
     , containers
-    , data-default
     , either
     , megaparsec
     , mtl
