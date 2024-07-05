@@ -67,7 +67,7 @@ newtype Var = Var Text deriving (Eq, Ord, Show)
 -- | Defines a lambda form.
 data Lam = Lam [Var] Exp deriving (Eq, Ord, Show)
 
--- | Defines a primative operator.
+-- | Defines a primitive operator.
 data Prim
   = PrimAdd
   | PrimSub

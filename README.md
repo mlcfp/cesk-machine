@@ -55,8 +55,8 @@ Name ideas
 ## TODO
 
 X ANF parser
-- scheme to ANF compiler
-- scheme AST to ANF AST conversion
+X scheme to ANF normalizer
+X scheme AST to ANF AST conversion
 X scheme renderer
 X anf renderer
 - add string and char values

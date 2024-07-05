@@ -153,5 +153,5 @@ factorialNormal = [r|(define f (λ (n)
 normalizePretty :: Text -> IO Text
 normalizePretty p = do
   let Right ast = schemeParse p
-  normalizeProg ast >>=
-    schemeRender renderOptions { renderOptionStyle = RenderPretty }
+  normalizeProg ast >>= schemeRender schemeRenderOptions
+    { schemeRenderOptionStyle = SchemeRenderPretty }

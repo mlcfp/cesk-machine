@@ -108,7 +108,7 @@ data ANFBind = ANFBind ANFVar ANFAtomic deriving (Eq, Ord, Show)
 -- | Defines a lambda form.
 data ANFLam = ANFLam [ANFVar] ANFExp deriving (Eq, Ord, Show)
 
--- | Defines a primative operator.
+-- | Defines a primitive operator.
 data ANFPrim
   = ANFPrimAdd
   | ANFPrimSub
@@ -284,13 +284,13 @@ data ANFRenderOptions = ANFRenderOptions
 
 -- | Defines the render state.
 data ANFRenderState = ANFRenderState
-  { renderStateColumn  :: Int
-  , renderStateText    :: Text
-  , renderStateOptions :: ANFRenderOptions
+  { anfRenderStateColumn  :: Int
+  , anfRenderStateText    :: Text
+  , anfRenderStateOptions :: ANFRenderOptions
   } deriving (Eq, Ord, Show)
 
 -- | Defines a renderer.
-type Render = StateT ANFRenderState IO
+type ANFRender = StateT ANFRenderState IO
 
 -- | The default render options.
 anfRenderOptions :: ANFRenderOptions
@@ -299,27 +299,27 @@ anfRenderOptions = ANFRenderOptions 2 ANFRenderNormal
 -- | Renders an ANF program.
 anfRender :: ANFRenderOptions -> ANFProg -> IO Text
 anfRender opt exp = do
-  ANFRenderState{..} <- execStateT (renderProg exp) $
+  ANFRenderState{..} <- execStateT (anfRenderProg exp) $
     ANFRenderState 0 T.empty opt
-  pure $ T.strip renderStateText
+  pure $ T.strip anfRenderStateText
 
 -- | Renders a program.
-renderProg :: ANFProg -> Render ()
-renderProg (ANFProg decs) = do
+anfRenderProg :: ANFProg -> ANFRender ()
+anfRenderProg (ANFProg decs) = do
   forM_ (zip [0..] decs) $ \(i :: Int, d) -> do
-    renderDec d
+    anfRenderDec d
     renderNewline
 
 -- | Renders a declaration.
-renderDec :: ANFDec -> Render ()
-renderDec = \case
+anfRenderDec :: ANFDec -> ANFRender ()
+anfRenderDec = \case
   ANFDecDefine var exp -> do
     renderOpen
     renderText "define"
     renderSpace
-    renderVar var
+    anfRenderVar var
     renderSpace
-    renderExp exp
+    anfRenderExp exp
     renderClose
   ANFDecBegin decs -> do
     renderOpen
@@ -327,25 +327,25 @@ renderDec = \case
     indentInc
     forM_ decs $ \d -> do
       renderNewline
-      renderDec d
+      anfRenderDec d
     renderClose
     indentDec
   ANFDecExp exp -> do
-    renderExp exp
+    anfRenderExp exp
 
 -- | Renders an expression.
-renderExp :: ANFExp -> Render ()
-renderExp = \case
+anfRenderExp :: ANFExp -> ANFRender ()
+anfRenderExp = \case
   ANFExpAtomic x -> do
-    renderAtomic x
+    anfRenderAtomic x
   ANFExpComplex x -> do
-    renderComplex x
+    anfRenderComplex x
   ANFExpLet v e0 e1 -> do
-    renderLet v e0 e1
+    anfRenderLet v e0 e1
 
 -- | Renders an expression.
-renderAtomic :: ANFAtomic -> Render ()
-renderAtomic = \case
+anfRenderAtomic :: ANFAtomic -> ANFRender ()
+anfRenderAtomic = \case
   ANFAtomicLam (ANFLam vars exp) -> do
     renderOpen
     renderText "λ"
@@ -353,15 +353,15 @@ renderAtomic = \case
     renderOpen
     forM_ (zip [0..] vars) $ \(i :: Int, v) -> do
       when (i > 0) renderSpace
-      renderVar v
+      anfRenderVar v
     renderClose
     indentInc
     renderNewline
-    renderExp exp
+    anfRenderExp exp
     renderClose
     indentDec
   ANFAtomicVar var -> do
-    renderVar var
+    anfRenderVar var
   ANFAtomicInt x -> do
     renderText $ T.pack $ show x
   ANFAtomicFloat x -> do
@@ -378,47 +378,47 @@ renderAtomic = \case
     renderText "\""
   ANFAtomicPrim prim aexps -> do
     renderOpen
-    renderPrim prim
+    anfRenderPrim prim
     renderSpace
     forM_ (zip [0..] aexps) $ \(i :: Int, e) -> do
       when (i > 0) renderSpace
-      renderAtomic e
+      anfRenderAtomic e
     renderClose
 
 -- | Renders an expression.
-renderComplex :: ANFComplex -> Render ()
-renderComplex = \case
+anfRenderComplex :: ANFComplex -> ANFRender ()
+anfRenderComplex = \case
   ANFComplexApp exps -> do
     renderOpen
     forM_ (zip [0..] exps) $ \(i :: Int, e) -> do
       when (i > 0) renderSpace
-      renderAtomic e
+      anfRenderAtomic e
     renderClose
   ANFComplexIf aexp exp0 exp1 -> do
     renderOpen
     renderText "if"
     renderSpace
-    renderAtomic aexp
+    anfRenderAtomic aexp
     indentInc
     renderNewline
-    renderExp exp0
+    anfRenderExp exp0
     renderNewline
-    renderExp exp1
+    anfRenderExp exp1
     renderClose
     indentDec
   ANFComplexCallCC aexp -> do
     renderOpen
     renderText "call/cc"
     renderSpace
-    renderAtomic aexp
+    anfRenderAtomic aexp
     renderClose
   ANFComplexSet var aexp -> do
     renderOpen
     renderText "set!"
     renderSpace
-    renderVar var
+    anfRenderVar var
     renderSpace
-    renderAtomic aexp
+    anfRenderAtomic aexp
     renderClose
   ANFComplexLetRec bindings exp -> do
     renderOpen
@@ -427,49 +427,49 @@ renderComplex = \case
     renderOpen
     forM_ (zip [0..] bindings) $ \(i :: Int, b) -> do
       when (i > 0) renderSpace
-      renderBind b
+      anfRenderBind b
     renderClose
     indentInc
     renderNewline
-    renderExp exp
+    anfRenderExp exp
     renderClose
     indentDec
 
 -- | Renders a let style form.
-renderLet :: ANFVar -> ANFExp -> ANFExp -> Render ()
-renderLet var exp0 exp1 = do
+anfRenderLet :: ANFVar -> ANFExp -> ANFExp -> ANFRender ()
+anfRenderLet var exp0 exp1 = do
   renderOpen
   renderText "let"
   renderSpace
   renderOpen
   renderOpen
-  renderVar var
+  anfRenderVar var
   renderSpace
-  renderExp exp0
+  anfRenderExp exp0
   renderClose
   renderClose
   indentInc
   renderNewline
-  renderExp exp1
+  anfRenderExp exp1
   renderClose
   indentDec
 
 -- | Renders a binding.
-renderBind :: ANFBind -> Render ()
-renderBind (ANFBind var aexp) = do
+anfRenderBind :: ANFBind -> ANFRender ()
+anfRenderBind (ANFBind var aexp) = do
   renderOpen
-  renderVar var
+  anfRenderVar var
   renderSpace
-  renderAtomic aexp
+  anfRenderAtomic aexp
   renderClose
 
 -- | Renders a variable.
-renderVar :: ANFVar -> Render ()
-renderVar (ANFVar name) = renderText name
+anfRenderVar :: ANFVar -> ANFRender ()
+anfRenderVar (ANFVar name) = renderText name
 
--- | Renders a primative operation.
-renderPrim :: ANFPrim -> Render ()
-renderPrim = renderText . \case
+-- | Renders a primitive operation.
+anfRenderPrim :: ANFPrim -> ANFRender ()
+anfRenderPrim = renderText . \case
   ANFPrimAdd -> "+"
   ANFPrimSub -> "-"
   ANFPrimMul -> "*"
@@ -477,44 +477,44 @@ renderPrim = renderText . \case
   ANFPrimEq  -> "="
 
 -- | Increases the indentation column.
-indentInc :: Render ()
+indentInc :: ANFRender ()
 indentInc = do
   ANFRenderState{..} <- get
-  ANFRenderOptions{..} <- pure renderStateOptions
-  renderStateColumn <- pure $ renderStateColumn + anfRenderOptionIndent
+  ANFRenderOptions{..} <- pure anfRenderStateOptions
+  anfRenderStateColumn <- pure $ anfRenderStateColumn + anfRenderOptionIndent
   put ANFRenderState{..}
 
 -- | Decreases the indentation column.
-indentDec :: Render ()
+indentDec :: ANFRender ()
 indentDec = do
   ANFRenderState{..} <- get
-  ANFRenderOptions{..} <- pure renderStateOptions
-  renderStateColumn <- pure $ renderStateColumn - anfRenderOptionIndent
+  ANFRenderOptions{..} <- pure anfRenderStateOptions
+  anfRenderStateColumn <- pure $ anfRenderStateColumn - anfRenderOptionIndent
   put ANFRenderState{..}
 
 -- | Renders a newline.
-renderNewline :: Render ()
+renderNewline :: ANFRender ()
 renderNewline = do
   ANFRenderState{..} <- get
-  case anfRenderOptionStyle renderStateOptions of
+  case anfRenderOptionStyle anfRenderStateOptions of
     ANFRenderNormal ->
       renderSpace
     ANFRenderPretty ->
-      renderText $ "\n" <> T.replicate renderStateColumn " "
+      renderText $ "\n" <> T.replicate anfRenderStateColumn " "
 
 -- | Renders literal text.
-renderText :: Text -> Render ()
+renderText :: Text -> ANFRender ()
 renderText x = modify $ \s ->
-  s { renderStateText = T.append (renderStateText s) x }
+  s { anfRenderStateText = T.append (anfRenderStateText s) x }
 
 -- | Renders an open parenthesis.
-renderOpen :: Render ()
+renderOpen :: ANFRender ()
 renderOpen = renderText "("
 
 -- | Renders a close parenthesis.
-renderClose :: Render ()
+renderClose :: ANFRender ()
 renderClose = renderText ")"
 
 -- | Renders a space character.
-renderSpace :: Render ()
+renderSpace :: ANFRender ()
 renderSpace = renderText " "

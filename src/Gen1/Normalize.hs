@@ -12,7 +12,6 @@ import Control.Monad.IO.Class (liftIO)
 import Control.Monad.State (StateT(..), evalStateT, get, put)
 import Data.Text (Text)
 import qualified Data.Text as T
-import qualified Gen0.ANF as A
 import Gen1.Scheme
 
 -- | Defines the normalizer state.

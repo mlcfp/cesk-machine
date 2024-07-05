@@ -53,12 +53,12 @@ main = do
 
   let Right prog = schemeParse testProg
   putStrLn $ show prog
-  p <- schemeRender renderOptions prog
+  p <- schemeRender schemeRenderOptions prog
   putStrLn $ T.unpack p
 
   prog' <- normalizeProg prog
   putStrLn $ show prog'
-  p' <- schemeRender renderOptions { renderOptionStyle = RenderPretty } prog'
+  p' <- schemeRender schemeRenderOptions { schemeRenderOptionStyle = SchemeRenderPretty } prog'
   putStrLn $ T.unpack p'
 
 

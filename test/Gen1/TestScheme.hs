@@ -62,9 +62,11 @@ testParseFactorial = testCase "parse factorial" $ do
 testPrintFactorial :: Test
 testPrintFactorial = testCase "print factorial" $ do
   let Right prog = schemeParse factorialProgram
-  p0 <- schemeRender renderOptions { renderOptionStyle = RenderPretty } prog
+  p0 <- schemeRender schemeRenderOptions
+    { schemeRenderOptionStyle = SchemeRenderPretty } prog
   assertEqual "pretty" factorialPretty p0
-  p1 <- schemeRender renderOptions { renderOptionStyle = RenderNormal } prog
+  p1 <- schemeRender schemeRenderOptions
+    { schemeRenderOptionStyle = SchemeRenderNormal } prog
   assertEqual "normal" factorialNormal p1
 
 factorialProgram = [r|
@@ -101,7 +103,7 @@ testRunFactorial :: Test
 testRunFactorial = testCase "run factorial" $ do
   let r = Right $ CESKValInt 2432902008176640000
   schemeRun factorialScheme >>= assertEqual "run" r
-  -- schemeExec factorialScheme >>= assertEqual "exec" r
+  schemeExec factorialScheme >>= assertEqual "exec" r
 
 factorialScheme = [r|
   (define (factorial n)
@@ -116,14 +118,17 @@ schemeRun code = do
       error $ T.unpack err
     Right prog -> do
       prog' <- normalizeProg prog
-      code' <- schemeRender renderOptions prog'
+      code' <- schemeRender schemeRenderOptions prog'
       ceskRun code'
 
--- TODO the scheme AST to ANF AST conversion is needed for this
--- schemeExec code = do
---   case schemeParse code of
---     Left err -> do
---       error $ T.unpack err
---     Right prog -> do
---       prog' <- normalizeProg prog
---       ceskExec prog'
+schemeExec code = do
+  case schemeParse code of
+    Left err -> do
+      error $ T.unpack err
+    Right prog -> do
+      prog' <- normalizeProg prog
+      case schemeANF prog' of
+        Left e2 ->
+          error $ T.unpack e2
+        Right p2 ->
+          ceskExec p2

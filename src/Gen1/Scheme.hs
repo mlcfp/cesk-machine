@@ -3,25 +3,27 @@
 --------------------------------------------------------------------------------
 
 module Gen1.Scheme
-  ( RenderOptions(..)
-  , RenderStyle(..)
-  , SchemeBind(..)
+  ( SchemeBind(..)
   , SchemeDec(..)
   , SchemeExp(..)
   , SchemeProg(..)
+  , SchemeRenderOptions(..)
+  , SchemeRenderStyle(..)
   , SchemeVar(..)
-  , renderOptions
+  , schemeANF
   , schemeParse
   , schemeRender
+  , schemeRenderOptions
   ) where
 
 import Prelude hiding (exp)
-import Control.Monad (forM_, void, when)
+import Control.Monad ((>=>), forM_, void, when)
 import Control.Monad.State (StateT(..), execStateT, get, put, modify)
 import Data.Either.Combinators (mapLeft)
 import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Void
+import Gen1.ANF
 import Gen1.Parse
 import Text.Megaparsec
 import Text.Megaparsec.Char
@@ -77,87 +79,89 @@ data SchemeExp
     deriving (Eq, Ord, Show)
 
 -- | Defines the render style.
-data RenderStyle = RenderNormal | RenderPretty deriving (Eq, Ord, Show)
+data SchemeRenderStyle
+  = SchemeRenderNormal
+  | SchemeRenderPretty deriving (Eq, Ord, Show)
 
 -- | Defines the render options.
-data RenderOptions = RenderOptions
-  { renderOptionIndent :: Int
-  , renderOptionStyle  :: RenderStyle
+data SchemeRenderOptions = SchemeRenderOptions
+  { schemeRenderOptionIndent :: Int
+  , schemeRenderOptionStyle  :: SchemeRenderStyle
   } deriving (Eq, Ord, Show)
 
 -- | Defines the render state.
-data RenderState = RenderState
-  { renderStateColumn  :: Int
-  , renderStateText    :: Text
-  , renderStateOptions :: RenderOptions
+data SchemeRenderState = SchemeRenderState
+  { schemeRenderStateColumn  :: Int
+  , schemeRenderStateText    :: Text
+  , schemeRenderStateOptions :: SchemeRenderOptions
   } deriving (Eq, Ord, Show)
 
 -- | Defines a renderer.
-type Render = StateT RenderState IO
+type SchemeRender = StateT SchemeRenderState IO
 
 -- | The default render options.
-renderOptions :: RenderOptions
-renderOptions = RenderOptions 2 RenderNormal
+schemeRenderOptions :: SchemeRenderOptions
+schemeRenderOptions = SchemeRenderOptions 2 SchemeRenderNormal
 
 -- | Renders a scheme program.
-schemeRender :: RenderOptions -> SchemeProg -> IO Text
+schemeRender :: SchemeRenderOptions -> SchemeProg -> IO Text
 schemeRender opt exp = do
-  RenderState{..} <- execStateT (renderProg exp) $
-    RenderState 0 T.empty opt
-  pure $ T.strip renderStateText
+  SchemeRenderState{..} <- execStateT (renderProg exp) $
+    SchemeRenderState 0 T.empty opt
+  pure $ T.strip schemeRenderStateText
 
 -- | Increases the indentation column.
-indentInc :: Render ()
+indentInc :: SchemeRender ()
 indentInc = do
-  RenderState{..} <- get
-  RenderOptions{..} <- pure renderStateOptions
-  renderStateColumn <- pure $ renderStateColumn + renderOptionIndent
-  put RenderState{..}
+  SchemeRenderState{..} <- get
+  SchemeRenderOptions{..} <- pure schemeRenderStateOptions
+  let c = schemeRenderStateColumn + schemeRenderOptionIndent
+  modify $ \s -> s { schemeRenderStateColumn = c }
 
 -- | Decreases the indentation column.
-indentDec :: Render ()
+indentDec :: SchemeRender ()
 indentDec = do
-  RenderState{..} <- get
-  RenderOptions{..} <- pure renderStateOptions
-  renderStateColumn <- pure $ renderStateColumn - renderOptionIndent
-  put RenderState{..}
+  SchemeRenderState{..} <- get
+  SchemeRenderOptions{..} <- pure schemeRenderStateOptions
+  let c = schemeRenderStateColumn - schemeRenderOptionIndent
+  modify $ \s -> s { schemeRenderStateColumn = c }
 
 -- | Renders a newline.
-renderNewline :: Render ()
+renderNewline :: SchemeRender ()
 renderNewline = do
-  RenderState{..} <- get
-  case renderOptionStyle renderStateOptions of
-    RenderNormal ->
+  SchemeRenderState{..} <- get
+  case schemeRenderOptionStyle schemeRenderStateOptions of
+    SchemeRenderNormal ->
       renderSpace
-    RenderPretty ->
-      renderText $ "\n" <> T.replicate renderStateColumn " "
+    SchemeRenderPretty ->
+      renderText $ "\n" <> T.replicate schemeRenderStateColumn " "
 
 -- | Renders literal text.
-renderText :: Text -> Render ()
+renderText :: Text -> SchemeRender ()
 renderText x = modify $ \s ->
-  s { renderStateText = T.append (renderStateText s) x }
+  s { schemeRenderStateText = T.append (schemeRenderStateText s) x }
 
 -- | Renders an open parenthesis.
-renderOpen :: Render ()
+renderOpen :: SchemeRender ()
 renderOpen = renderText "("
 
 -- | Renders a close parenthesis.
-renderClose :: Render ()
+renderClose :: SchemeRender ()
 renderClose = renderText ")"
 
 -- | Renders a space character.
-renderSpace :: Render ()
+renderSpace :: SchemeRender ()
 renderSpace = renderText " "
 
 -- | Renders a program.
-renderProg :: SchemeProg -> Render ()
+renderProg :: SchemeProg -> SchemeRender ()
 renderProg (SchemeProg decs) = do
   forM_ (zip [0..] decs) $ \(i :: Int, d) -> do
     renderDec d
     renderNewline
 
 -- | Renders a declaration.
-renderDec :: SchemeDec -> Render ()
+renderDec :: SchemeDec -> SchemeRender ()
 renderDec = \case
   SchemeDecFunc var vars exp -> do
     renderOpen
@@ -195,7 +199,7 @@ renderDec = \case
     renderExp exp
 
 -- | Renders an expression.
-renderExp :: SchemeExp -> Render ()
+renderExp :: SchemeExp -> SchemeRender ()
 renderExp = \case
   SchemeExpApp exps -> do
     renderOpen
@@ -265,7 +269,7 @@ renderExp = \case
     renderText "#<void>"
 
 -- | Renders a let style form.
-renderLet :: Text -> [SchemeBind] -> SchemeExp -> Render ()
+renderLet :: Text -> [SchemeBind] -> SchemeExp -> SchemeRender ()
 renderLet name bindings exp = do
   renderOpen
   renderText name
@@ -282,7 +286,7 @@ renderLet name bindings exp = do
   indentDec
 
 -- | Renders a binding.
-renderBind :: SchemeBind -> Render ()
+renderBind :: SchemeBind -> SchemeRender ()
 renderBind (SchemeBind var exp) = do
   renderOpen
   renderVar var
@@ -291,7 +295,7 @@ renderBind (SchemeBind var exp) = do
   renderClose
 
 -- | Renders a variable.
-renderVar :: SchemeVar -> Render ()
+renderVar :: SchemeVar -> SchemeRender ()
 renderVar (SchemeVar name) = renderText name
 
 -- | Parses a scheme program.
@@ -436,3 +440,106 @@ parseFalse = void $ try (parseSymbol "#f") <|> parseSymbol "#false"
 -- | Parses a void literal.
 parseVoid :: Parser ()
 parseVoid = void $ parseSymbol "#void"
+
+-- | Converts a scheme AST to an ANF AST.
+schemeANF :: SchemeProg -> Either Text ANFProg
+schemeANF (SchemeProg decs) = do
+  ANFProg <$> mapM schemeDecANF decs
+
+-- | Converts a scheme declaration to an ANF declaration.
+schemeDecANF :: SchemeDec -> Either Text ANFDec
+schemeDecANF = \case
+  SchemeDecFunc (SchemeVar var) vars exp ->
+    Left $ "scheme not normalized: function " <> var
+  SchemeDecDefine var exp ->
+    ANFDecDefine <$> schemeVarANF var <*> schemeExpANF exp
+  SchemeDecBegin decs ->
+    ANFDecBegin <$> mapM schemeDecANF decs
+  SchemeDecExp exp ->
+    ANFDecExp <$> schemeExpANF exp
+
+-- | Converts a scheme expression to an ANF expression.
+schemeExpANF :: SchemeExp -> Either Text ANFExp
+schemeExpANF = \case
+  SchemeExpApp exps -> do
+    aexps <- mapM schemeAtomic exps
+    case aexps of
+      (ANFAtomicVar var):es | Just p <- schemePrim var -> do
+        pure $ ANFExpAtomic $ ANFAtomicPrim p es
+      _otherwise -> do
+        pure $ ANFExpComplex $ ANFComplexApp aexps
+  SchemeExpLet (SchemeBind var exp0:[]) exp1 -> do
+    ANFExpLet
+      <$> schemeVarANF var
+      <*> schemeExpANF exp0
+      <*> schemeExpANF exp1
+  SchemeExpLet bindings _exp -> do
+    Left $ "bad bindings in let: " <> T.intercalate " "
+      (map (\(SchemeBind (SchemeVar var) _) -> var) bindings)
+  SchemeExpLetRec bindings exp -> do
+    e <- ANFComplexLetRec
+      <$> mapM schemeBindANF bindings
+      <*> schemeExpANF exp
+    pure $ ANFExpComplex e
+  SchemeExpIf exp0 exp1 exp2 -> do
+    e <- ANFComplexIf
+      <$> schemeAtomic exp0
+      <*> schemeExpANF exp1
+      <*> schemeExpANF exp2
+    pure $ ANFExpComplex e
+  SchemeExpSet var exp -> do
+    e <- ANFComplexSet
+      <$> schemeVarANF var
+      <*> schemeAtomic exp
+    pure $ ANFExpComplex e
+  SchemeExpCallCC exp -> do
+    e <- ANFComplexCallCC <$> schemeAtomic exp
+    pure $ ANFExpComplex e
+  SchemeExpLam vars exp -> do
+    lam <- ANFLam
+      <$> mapM schemeVarANF vars
+      <*> schemeExpANF exp
+    pure $ ANFExpAtomic $ ANFAtomicLam lam
+  SchemeExpVar var -> do
+    v <- ANFAtomicVar <$> schemeVarANF var
+    pure $ ANFExpAtomic v
+  SchemeExpInt x -> do
+    pure $ ANFExpAtomic $ ANFAtomicInt x
+  SchemeExpFloat x -> do
+    pure $ ANFExpAtomic $ ANFAtomicFloat x
+  SchemeExpBool x -> do
+    pure $ ANFExpAtomic $ ANFAtomicBool x
+  SchemeExpStr x -> do
+    pure $ ANFExpAtomic $ ANFAtomicStr x
+  SchemeExpVoid -> do
+    pure $ ANFExpAtomic $ ANFAtomicVoid
+
+-- | Converts a scheme variable to an ANF variable.
+schemeVarANF :: SchemeVar -> Either Text ANFVar
+schemeVarANF (SchemeVar var) = pure $ ANFVar var
+
+-- | Converts a scheme binding to an ANF binding.
+schemeBindANF :: SchemeBind -> Either Text ANFBind
+schemeBindANF (SchemeBind var exp) =
+  ANFBind <$> schemeVarANF var <*> schemeAtomic exp
+
+-- | Converts a scheme expression to an ANF atomic.
+schemeAtomic :: SchemeExp -> Either Text ANFAtomic
+schemeAtomic = schemeExpANF >=> anfAtomic
+
+-- | Converts an ANF expression to an ANF atomic.
+anfAtomic :: ANFExp -> Either Text ANFAtomic
+anfAtomic = \case
+  ANFExpAtomic a -> pure a
+  _otherwise -> Left "non-atomic expression"
+
+-- | Converts a scheme variable to an ANF primitive.
+schemePrim :: ANFVar -> Maybe ANFPrim
+schemePrim (ANFVar var) =
+  case var of
+    "+" -> Just ANFPrimAdd
+    "-" -> Just ANFPrimSub
+    "*" -> Just ANFPrimMul
+    "/" -> Just ANFPrimDiv
+    "=" -> Just ANFPrimEq
+    _op -> Nothing
