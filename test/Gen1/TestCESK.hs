@@ -20,6 +20,8 @@ tests = testGroup "CESK"
   [ testVal
   , testVar
   , testMath
+  , testLogical
+  , testChar
   , testDefine
   , testANFFactorial
   ]
@@ -58,6 +60,36 @@ testMath = testCase "math" $ do
     assertEqual "div" (Right $ CESKValInt 0)
   ceskRun "(* (+ 1 (- 3 2)) 3)" >>=
     assertEqual "complex 1" (Right $ CESKValInt 6)
+  ceskRun "(+ 6.6 78.8)" >>=
+    assertEqual "add float" (Right $ CESKValFloat $ 6.6 + 78.8)
+  ceskRun "(* 6 7.2)" >>=
+    assertEqual "mul float" (Right $ CESKValFloat $ 6 * 7.2)
+  ceskRun "(/ 6 7.0)" >>=
+    assertEqual "div float" (Right $ CESKValFloat $ 6 / 7.0)
+  ceskRun "(* (+ 1 (- 3.0 2)) 3)" >>=
+    assertEqual "complex 2" (Right $ CESKValFloat $ ((3 - 2) + 1) * 3)
+
+testLogical :: Test
+testLogical = testCase "logical" $ do
+  ceskRun "(> 1 2)" >>=
+    assertEqual "gt" (Right $ CESKValBool False)
+  ceskRun "(< 1 2)" >>=
+    assertEqual "lt" (Right $ CESKValBool True)
+  ceskRun "(>= 1 2)" >>=
+    assertEqual "ge" (Right $ CESKValBool False)
+  ceskRun "(<= 1 2)" >>=
+    assertEqual "le" (Right $ CESKValBool True)
+  ceskRun "(= 1 2)" >>=
+    assertEqual "le" (Right $ CESKValBool False)
+  ceskRun "(/= 1 2)" >>=
+    assertEqual "le" (Right $ CESKValBool True)
+
+testChar :: Test
+testChar = testCase "char" $ do
+  ceskRun "(= #\\a #\\b)" >>=
+    assertEqual "eq" (Right $ CESKValBool False)
+  ceskRun "(= #\\@ #\\@)" >>=
+    assertEqual "eq" (Right $ CESKValBool True)
 
 testDefine :: Test
 testDefine = testCase "define" $ do

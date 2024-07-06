@@ -87,6 +87,7 @@ data ANFAtomic
   | ANFAtomicInt Integer
   | ANFAtomicFloat Double
   | ANFAtomicStr Text
+  | ANFAtomicChar Char
   | ANFAtomicVoid
     deriving (Eq, Ord, Show)
 
@@ -114,7 +115,12 @@ data ANFPrim
   | ANFPrimSub
   | ANFPrimMul
   | ANFPrimDiv
-  | ANFPrimEq
+  | ANFPrimEQ
+  | ANFPrimNE
+  | ANFPrimGT
+  | ANFPrimGE
+  | ANFPrimLT
+  | ANFPrimLE
     deriving (Eq, Ord, Show)
 
 -- | Parses an ANF program.
@@ -164,6 +170,7 @@ parseAtomic = choice
   , try $ ANFAtomicFloat <$> parseDouble
   , try $ ANFAtomicInt <$> parseInteger
   , try $ ANFAtomicStr <$> parseString
+  , try $ ANFAtomicChar <$> parseChar
   , try $ ANFAtomicLam <$> parseLam
   , parseParens $ ANFAtomicPrim <$> parsePrim <*> some parseAtomic
   ]
@@ -248,11 +255,16 @@ parseLetrec =
 -- | Parses a primary operator.
 parsePrim :: Parser ANFPrim
 parsePrim = choice
-  [ ANFPrimAdd <$ parseSymbol "+"
+  [ ANFPrimNE  <$ parseSymbol "/="
+  , ANFPrimEQ  <$ parseSymbol "="
+  , ANFPrimGE  <$ parseSymbol ">="
+  , ANFPrimGT  <$ parseSymbol ">"
+  , ANFPrimLE  <$ parseSymbol "<="
+  , ANFPrimLT  <$ parseSymbol "<"
+  , ANFPrimAdd <$ parseSymbol "+"
   , ANFPrimSub <$ parseSymbol "-"
   , ANFPrimMul <$ parseSymbol "*"
   , ANFPrimDiv <$ parseSymbol "/"
-  , ANFPrimEq  <$ parseSymbol "="
   ]
 
 -- | Parses an expression.
@@ -373,9 +385,9 @@ anfRenderAtomic = \case
   ANFAtomicVoid -> do
     renderText "#void"
   ANFAtomicStr x -> do
-    renderText "\""
-    renderText x
-    renderText "\""
+    renderText $ "\"" <> x <> "\""
+  ANFAtomicChar x -> do
+    renderText $ T.snoc "#\\" x
   ANFAtomicPrim prim aexps -> do
     renderOpen
     anfRenderPrim prim
@@ -474,23 +486,28 @@ anfRenderPrim = renderText . \case
   ANFPrimSub -> "-"
   ANFPrimMul -> "*"
   ANFPrimDiv -> "/"
-  ANFPrimEq  -> "="
+  ANFPrimEQ  -> "="
+  ANFPrimNE  -> "/="
+  ANFPrimGT  -> ">"
+  ANFPrimGE  -> ">="
+  ANFPrimLT  -> "<"
+  ANFPrimLE  -> "<="
 
 -- | Increases the indentation column.
 indentInc :: ANFRender ()
 indentInc = do
   ANFRenderState{..} <- get
   ANFRenderOptions{..} <- pure anfRenderStateOptions
-  anfRenderStateColumn <- pure $ anfRenderStateColumn + anfRenderOptionIndent
-  put ANFRenderState{..}
+  let c = anfRenderStateColumn + anfRenderOptionIndent
+  modify $ \s -> s { anfRenderStateColumn = c }
 
 -- | Decreases the indentation column.
 indentDec :: ANFRender ()
 indentDec = do
   ANFRenderState{..} <- get
   ANFRenderOptions{..} <- pure anfRenderStateOptions
-  anfRenderStateColumn <- pure $ anfRenderStateColumn - anfRenderOptionIndent
-  put ANFRenderState{..}
+  let c = anfRenderStateColumn - anfRenderOptionIndent
+  modify $ \s -> s { anfRenderStateColumn = c }
 
 -- | Renders a newline.
 renderNewline :: ANFRender ()

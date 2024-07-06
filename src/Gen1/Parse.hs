@@ -4,6 +4,7 @@
 
 module Gen1.Parse
   ( Parser
+  , parseChar
   , parseDouble
   , parseIdentifier
   , parseInteger
@@ -48,9 +49,13 @@ parseInteger = parseLexeme L.decimal
 parseDouble :: Parser Double
 parseDouble = parseLexeme L.float
 
+-- | Parsers a single character.
+parseChar :: Parser Char
+parseChar = parseLexeme $ char '#' *> char '\\' *> anySingle
+
 -- | Paeses a string.
 parseString :: Parser Text
-parseString = fmap T.pack $ char '\"' *> manyTill L.charLiteral (char '\"')
+parseString = fmap T.pack $ char '"' *> manyTill L.charLiteral (char '"')
 
 -- | Parses an identifier.
 parseIdentifier :: Parser Text

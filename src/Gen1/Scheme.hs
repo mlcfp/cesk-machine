@@ -75,6 +75,7 @@ data SchemeExp
   | SchemeExpFloat Double
   | SchemeExpBool Bool
   | SchemeExpStr Text
+  | SchemeExpChar Char
   | SchemeExpVoid
     deriving (Eq, Ord, Show)
 
@@ -262,9 +263,9 @@ renderExp = \case
   SchemeExpBool False -> do
     renderText "#f"
   SchemeExpStr x -> do
-    renderText "\""
-    renderText x
-    renderText "\""
+    renderText $ "\"" <> x <> "\""
+  SchemeExpChar x -> do
+    renderText $ T.snoc "#\\" x
   SchemeExpVoid -> do
     renderText "#<void>"
 
@@ -356,6 +357,7 @@ parseExp = choice
   , try $ SchemeExpBool True <$ parseTrue
   , try $ SchemeExpBool False <$ parseFalse
   , try $ SchemeExpStr <$> parseString
+  , try $ SchemeExpChar <$> parseChar
   , try $ SchemeExpVoid <$ parseVoid
   , parseApp
   ]
@@ -511,6 +513,8 @@ schemeExpANF = \case
     pure $ ANFExpAtomic $ ANFAtomicBool x
   SchemeExpStr x -> do
     pure $ ANFExpAtomic $ ANFAtomicStr x
+  SchemeExpChar x -> do
+    pure $ ANFExpAtomic $ ANFAtomicChar x
   SchemeExpVoid -> do
     pure $ ANFExpAtomic $ ANFAtomicVoid
 
@@ -537,9 +541,14 @@ anfAtomic = \case
 schemePrim :: ANFVar -> Maybe ANFPrim
 schemePrim (ANFVar var) =
   case var of
-    "+" -> Just ANFPrimAdd
-    "-" -> Just ANFPrimSub
-    "*" -> Just ANFPrimMul
-    "/" -> Just ANFPrimDiv
-    "=" -> Just ANFPrimEq
-    _op -> Nothing
+    "+"  -> Just ANFPrimAdd
+    "-"  -> Just ANFPrimSub
+    "*"  -> Just ANFPrimMul
+    "/"  -> Just ANFPrimDiv
+    "="  -> Just ANFPrimEQ
+    "/=" -> Just ANFPrimNE
+    ">"  -> Just ANFPrimGT
+    ">=" -> Just ANFPrimGE
+    "<"  -> Just ANFPrimLT
+    "<=" -> Just ANFPrimLE
+    _op  -> Nothing

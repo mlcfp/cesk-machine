@@ -18,6 +18,7 @@ tests = testGroup "ANF"
   , testParseBool
   , testParseVoid
   , testParseStr
+  , testParseChar
   , testParseFloat
   , testParseVar
   , testParsePrim
@@ -60,6 +61,12 @@ testParseStr = testCase "str" $ do
     (Right $ expProg $ ANFExpAtomic $ ANFAtomicStr "a")
     (anfParse "\"a\"")
 
+testParseChar :: Test
+testParseChar = testCase "char" $ do
+  assertEqual "str 1"
+    (Right $ expProg $ ANFExpAtomic $ ANFAtomicChar 'a')
+    (anfParse "#\\a")
+
 testParseFloat :: Test
 testParseFloat = testCase "float" $ do
   assertEqual "float 1"
@@ -93,10 +100,38 @@ testParsePrim = testCase "prim" $ do
     (Right $ expProg $ ANFExpAtomic $ ANFAtomicPrim
       ANFPrimDiv [ANFAtomicInt 0, ANFAtomicInt 2])
     (anfParse "(/ 0 2)")
-  assertEqual "prim eq"
+  assertEqual "prim eq int"
     (Right $ expProg $ ANFExpAtomic $ ANFAtomicPrim
-      ANFPrimEq [ANFAtomicInt 0, ANFAtomicInt 2])
+      ANFPrimEQ [ANFAtomicInt 0, ANFAtomicInt 2])
     (anfParse "(= 0 2)")
+  assertEqual "prim eq bool"
+    (Right $ expProg $ ANFExpAtomic $ ANFAtomicPrim
+      ANFPrimEQ [ANFAtomicBool True, ANFAtomicBool False])
+    (anfParse "(= #t #f)")
+  assertEqual "prim eq float"
+    (Right $ expProg $ ANFExpAtomic $ ANFAtomicPrim
+      ANFPrimEQ [ANFAtomicFloat 0, ANFAtomicFloat 2])
+    (anfParse "(= 0.0 2.0)")
+  assertEqual "prim ne int"
+    (Right $ expProg $ ANFExpAtomic $ ANFAtomicPrim
+      ANFPrimNE [ANFAtomicInt 0, ANFAtomicInt 2])
+    (anfParse "(/= 0 2)")
+  assertEqual "prim gt int"
+    (Right $ expProg $ ANFExpAtomic $ ANFAtomicPrim
+      ANFPrimGT [ANFAtomicInt 0, ANFAtomicInt 2])
+    (anfParse "(> 0 2)")
+  assertEqual "prim ge int"
+    (Right $ expProg $ ANFExpAtomic $ ANFAtomicPrim
+      ANFPrimGE [ANFAtomicInt 0, ANFAtomicInt 2])
+    (anfParse "(>= 0 2)")
+  assertEqual "prim lt int"
+    (Right $ expProg $ ANFExpAtomic $ ANFAtomicPrim
+      ANFPrimLT [ANFAtomicInt 0, ANFAtomicInt 2])
+    (anfParse "(< 0 2)")
+  assertEqual "prim le int"
+    (Right $ expProg $ ANFExpAtomic $ ANFAtomicPrim
+      ANFPrimLE [ANFAtomicInt 0, ANFAtomicInt 2])
+    (anfParse "(<= 0 2)")
 
 testParseLam :: Test
 testParseLam = testCase "lam" $ do
@@ -124,7 +159,7 @@ testProgFactorial = testCase "factorial" $ do
       [ ANFDecDefine (ANFVar "f") $ ANFExpAtomic
         (ANFAtomicLam $ ANFLam [ANFVar "n"]
           (ANFExpLet (ANFVar "g1")
-            (ANFExpAtomic $ ANFAtomicPrim ANFPrimEq
+            (ANFExpAtomic $ ANFAtomicPrim ANFPrimEQ
               [ ANFAtomicVar (ANFVar "n")
               , ANFAtomicInt 0
               ])

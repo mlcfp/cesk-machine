@@ -18,6 +18,7 @@ module Gen1.CESK
   , ceskExec
   , ceskGarbageCollect
   , ceskRun
+  , ceskValDesc
   , stateSpace
   , storeAlloc
   , storeEmpty
@@ -103,10 +104,25 @@ data CESKCont
 data CESKVal
   = CESKValVoid
   | CESKValInt Integer
+  | CESKValFloat Double
   | CESKValBool Bool
+  | CESKValStr Text
+  | CESKValChar Char
   | CESKValClos ANFLam CESKEnv
   | CESKValCont CESKCont
     deriving (Eq, Ord, Show)
+
+-- | Returns a description of a value.
+ceskValDesc :: CESKVal -> Text
+ceskValDesc = \case
+  CESKValVoid  {} -> "void"
+  CESKValInt   {} -> "int"
+  CESKValFloat {} -> "float"
+  CESKValBool  {} -> "bool"
+  CESKValStr   {} -> "str"
+  CESKValChar  {} -> "char"
+  CESKValClos  {} -> "closure"
+  CESKValCont  {} -> "continuation"
 
 -- TODO change to default instance
 initialStatistics :: CESKStatistics
@@ -226,6 +242,8 @@ ceskInitDecs = mapM_ $ \case
     ceskPutVar var $ CESKValBool x
   ANFDecDefine var (ANFExpAtomic (ANFAtomicInt x)) -> do
     ceskPutVar var $ CESKValInt x
+  ANFDecDefine var (ANFExpAtomic (ANFAtomicFloat x)) -> do
+    ceskPutVar var $ CESKValFloat x
   ANFDecDefine var _ -> do
     throwError "only lambda or constants allowed in definitions"
   ANFDecBegin{} -> do
@@ -241,40 +259,150 @@ evalAtomic atomic = do
       pure CESKValVoid
     ANFAtomicInt x -> do
       pure $ CESKValInt x
+    ANFAtomicFloat x -> do
+      pure $ CESKValFloat x
     ANFAtomicBool x -> do
       pure $ CESKValBool x
+    ANFAtomicStr x -> do
+      pure $ CESKValStr x
+    ANFAtomicChar x -> do
+      pure $ CESKValChar x
     ANFAtomicLam lam -> do
       CESKValClos lam . ceskStateEnv <$> gets ceskMachineState
     ANFAtomicVar var -> do
       ceskGetVar var
-    ANFAtomicPrim ANFPrimAdd [aexp1, aexp2] ->
-      evalBinaryInt (+) aexp1 aexp2
-    ANFAtomicPrim ANFPrimSub [aexp1, aexp2] ->
-      evalBinaryInt (-) aexp1 aexp2
-    ANFAtomicPrim ANFPrimMul [aexp1, aexp2] ->
-      evalBinaryInt (*) aexp1 aexp2
-    ANFAtomicPrim ANFPrimDiv [aexp1, aexp2] ->
-      evalBinaryInt div aexp1 aexp2
-    ANFAtomicPrim ANFPrimEq [aexp1, aexp2] ->
-      evalCompareInt (==) aexp1 aexp2
-    ANFAtomicPrim prim _ ->
+    ANFAtomicPrim p [a, b] | primBinary p ->
+      evalBinary p a b
+    ANFAtomicPrim p [a, b] | primLogical p ->
+      evalLogical p a b
+    ANFAtomicPrim prim _args ->
       throwError $ "bad args for prim " <> textShow prim
 
-type BinaryInt = Integer -> Integer -> Integer
+-- | Determines if a primitive is binary.
+primBinary :: ANFPrim -> Bool
+primBinary = \case
+  ANFPrimAdd -> True
+  ANFPrimSub -> True
+  ANFPrimMul -> True
+  ANFPrimDiv -> True
+  _otherwise -> False
 
-evalBinaryInt :: BinaryInt -> ANFAtomic -> ANFAtomic -> CESK CESKVal
-evalBinaryInt f aexp1 aexp2 = do
-  CESKValInt x <- evalAtomic aexp1 -- TODO: check the results types
-  CESKValInt y <- evalAtomic aexp2
-  pure . CESKValInt $ f x y
+-- | Determines if a primitive is logical.
+primLogical :: ANFPrim -> Bool
+primLogical = \case
+  ANFPrimEQ -> True
+  ANFPrimNE -> True
+  ANFPrimGT -> True
+  ANFPrimGE -> True
+  ANFPrimLT -> True
+  ANFPrimLE -> True
+  _otherwise -> False
 
-type CompareInt = Integer -> Integer -> Bool
+-- | Evaluates a binary primitive.
+evalBinary :: ANFPrim -> ANFAtomic -> ANFAtomic -> CESK CESKVal
+evalBinary prim aexp1 aexp2 = do
+  x <- evalAtomic aexp1
+  y <- evalAtomic aexp2
+  case (x, y) of
+    (CESKValInt a, CESKValInt b) -> do
+      evalBinaryInt prim a b
+    (CESKValInt a, CESKValFloat b) -> do
+      evalBinaryFloat prim (fromIntegral a) b
+    (CESKValFloat a, CESKValInt b) -> do
+      evalBinaryFloat prim a $ fromIntegral b
+    (CESKValFloat a, CESKValFloat b) -> do
+      evalBinaryFloat prim a b
+    (a, b) -> do
+      throwError $ "cannot apply primative to " <>
+        ceskValDesc a <> " and " <> ceskValDesc b
 
-evalCompareInt :: CompareInt -> ANFAtomic -> ANFAtomic -> CESK CESKVal
-evalCompareInt f aexp1 aexp2 = do
-  CESKValInt x <- evalAtomic aexp1 -- TODO: check the results types
-  CESKValInt y <- evalAtomic aexp2
-  pure . CESKValBool $ f x y
+-- | Evaluates a binary integer primitive.
+evalBinaryInt :: ANFPrim -> Integer -> Integer -> CESK CESKVal
+evalBinaryInt prim x y = do
+  case prim of
+    ANFPrimAdd -> pure . CESKValInt $ x + y
+    ANFPrimSub -> pure . CESKValInt $ x - y
+    ANFPrimMul -> pure . CESKValInt $ x * y
+    ANFPrimDiv -> pure . CESKValInt $ x `div` y
+    _otherwise -> throwError $
+      "bad binary primitive for integers: " <> textShow prim
+
+-- | Evaluates a binary float primitive.
+evalBinaryFloat :: ANFPrim -> Double -> Double -> CESK CESKVal
+evalBinaryFloat prim x y = do
+  case prim of
+    ANFPrimAdd -> pure . CESKValFloat $ x + y
+    ANFPrimSub -> pure . CESKValFloat $ x - y
+    ANFPrimMul -> pure . CESKValFloat $ x * y
+    ANFPrimDiv -> pure . CESKValFloat $ x / y
+    _otherwise -> throwError $
+      "bad binary primitive for floats: " <> textShow prim
+
+-- | Evaluates a logical primitive.
+evalLogical :: ANFPrim -> ANFAtomic -> ANFAtomic -> CESK CESKVal
+evalLogical prim aexp1 aexp2 = do
+  x <- evalAtomic aexp1
+  y <- evalAtomic aexp2
+  case (x, y) of
+    (CESKValInt a, CESKValInt b) -> do
+      evalLogicalInt prim a b
+    (CESKValInt a, CESKValFloat b) -> do
+      evalLogicalFloat prim (fromIntegral a) b
+    (CESKValFloat a, CESKValInt b) -> do
+      evalLogicalFloat prim a $ fromIntegral b
+    (CESKValFloat a, CESKValFloat b) -> do
+      evalLogicalFloat prim a b
+    (CESKValBool a, CESKValBool b) -> do
+      evalLogicalBool prim a b
+    (CESKValChar a, CESKValChar b) -> do
+      evalLogicalChar prim a b
+    (a, b) -> do
+      throwError $ "cannot apply primative to " <>
+        ceskValDesc a <> " and " <> ceskValDesc b
+
+-- | Evaluates a logical integer primitive.
+evalLogicalInt :: ANFPrim -> Integer -> Integer -> CESK CESKVal
+evalLogicalInt prim x y = do
+  case prim of
+    ANFPrimEQ -> pure . CESKValBool $ x == y
+    ANFPrimNE -> pure . CESKValBool $ x /= y
+    ANFPrimGT -> pure . CESKValBool $ x > y
+    ANFPrimGE -> pure . CESKValBool $ x >= y
+    ANFPrimLT -> pure . CESKValBool $ x < y
+    ANFPrimLE -> pure . CESKValBool $ x <= y
+    _otherwise -> throwError $
+      "bad logical primitive for integers: " <> textShow prim
+
+-- | Evaluates a logical integer primitive.
+evalLogicalFloat :: ANFPrim -> Double -> Double -> CESK CESKVal
+evalLogicalFloat prim x y = do
+  case prim of
+    ANFPrimEQ -> pure . CESKValBool $ x == y
+    ANFPrimNE -> pure . CESKValBool $ x /= y
+    ANFPrimGT -> pure . CESKValBool $ x > y
+    ANFPrimGE -> pure . CESKValBool $ x >= y
+    ANFPrimLT -> pure . CESKValBool $ x < y
+    ANFPrimLE -> pure . CESKValBool $ x <= y
+    _otherwise -> throwError $
+      "bad logical primitive for floats: " <> textShow prim
+
+-- | Evaluates a logical boolean primitive.
+evalLogicalBool :: ANFPrim -> Bool -> Bool -> CESK CESKVal
+evalLogicalBool prim x y = do
+  case prim of
+    ANFPrimEQ -> pure . CESKValBool $ x == y
+    ANFPrimNE -> pure . CESKValBool $ x /= y
+    _otherwise -> throwError $
+      "bad logical primitive for bools: " <> textShow prim
+
+-- | Evaluates a logical char primitive.
+evalLogicalChar :: ANFPrim -> Char -> Char -> CESK CESKVal
+evalLogicalChar prim x y = do
+  case prim of
+    ANFPrimEQ -> pure . CESKValBool $ x == y
+    ANFPrimNE -> pure . CESKValBool $ x /= y
+    _otherwise -> throwError $
+      "bad logical primitive for bools: " <> textShow prim
 
 -- | Steps the machine from the current state to the next.
 ceskStep :: CESK ()
