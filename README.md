@@ -54,19 +54,9 @@ Name ideas
 
 ## TODO
 
-X ANF parser
-X scheme to ANF normalizer
-X scheme AST to ANF AST conversion
-X scheme renderer
-X anf renderer
-- add string and char values
 - add word values (bytes?)
-- add float values and float division
-- add logical operators
 - add pair values for cons, lists, etc
 - add `begin` to dec lexer
-X garbage collector
-X top level defines
 - CPS transform (see micinski)
 - tail call optimization
 - add builtins for IO etc
@@ -81,3 +71,16 @@ X top level defines
   - message passing actors?
 - relational programming support
   - microkanren?
+
+## DONE
+
+- ANF parser
+- scheme to ANF normalizer
+- scheme AST to ANF AST conversion
+- scheme renderer
+- anf renderer
+- add float values and float division
+- add logical operators
+- garbage collector
+- top level defines
+- add string and char values
