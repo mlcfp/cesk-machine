@@ -134,7 +134,7 @@ testParsePrim = testCase "prim" $ do
     (anfParse "(<= 0 2)")
   assertEqual "built-in 1"
     (Right $ expProg $ ANFExpAtomic $ ANFAtomicPrim
-      (ANFPrimFunc "sin") [ANFAtomicInt 1])
+      (ANFPrimFunc "@sin") [ANFAtomicInt 1])
     (anfParse "(@sin 1)")
 
 testParseLam :: Test

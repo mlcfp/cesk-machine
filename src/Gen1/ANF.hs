@@ -282,7 +282,10 @@ parsePrim = choice
 
 -- | Parses a built-in function.
 parseFunc :: Parser Text
-parseFunc = parseSymbol "@" *> parseIdentifier
+parseFunc = do
+  a <- parseSymbol "@"
+  b <- parseIdentifier
+  pure $ a <> b
 
 -- | Parses an expression.
 parseBool :: Parser Bool

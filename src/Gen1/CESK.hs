@@ -3,26 +3,14 @@
 --------------------------------------------------------------------------------
 
 module Gen1.CESK
-  ( CESKAddr(..)
-  , CESKCont(..)
-  , CESKEnv
-  , CESKMachine(..)
-  , CESKState(..)
-  , CESKStatistics(..)
-  , CESKStore(..)
-  , CESKStoreColor(..)
-  , CESKStoreItem(..)
-  , CESKStoreSpace
-  , CESKVal(..)
-  , ceskDo
+  ( ceskDo
   , ceskExec
   , ceskGarbageCollect
   , ceskRun
-  , ceskValDesc
-  , stateSpace
   , storeAlloc
   , storeEmpty
   , storePutVal
+  , module X
   ) where
 
 import Prelude hiding (exp)
@@ -33,144 +21,12 @@ import Data.Maybe (fromJust)
 import Data.Text (Text)
 import qualified Data.Text as T
 import Control.Monad (forM, forM_, when)
-import Control.Monad.Except (ExceptT(..), catchError, runExceptT, throwError)
-import Control.Monad.IO.Class (liftIO)
-import Control.Monad.State (StateT(..), evalStateT, get, gets, put, modify)
+import Control.Monad.Except (catchError, runExceptT, throwError)
+import Control.Monad.State (evalStateT, get, gets, put, modify)
 import Gen1.ANF
+import Gen1.Intrinsic
+import Gen1.Types as X
 import Gen1.Util
-
--- | Defines the execution monad.
-type CESK = ExceptT Text (StateT CESKMachine IO)
-
--- | Defines the evaluation state.
-data CESKMachine = CESKMachine
-  { ceskMachineStatistics :: CESKStatistics
-  , ceskMachineState      :: CESKState
-  } deriving (Eq, Ord, Show)
-
--- | Defines various statistics used to monitor and control
--- the machine.
-data CESKStatistics = CESKStatistics
-  { ceskStepCountLimit :: Integer
-  , ceskStepCountGC    :: Integer
-  , ceskStepCountTotal :: Integer
-  } deriving (Eq, Ord, Show)
-
--- | Defines a CESK machine state.
-data CESKState = CESKState
-  { ceskStateExp   :: ANFExp
-  , ceskStateEnv   :: CESKEnv
-  , ceskStateStore :: CESKStore
-  , ceskStateCont  :: CESKCont
-  } deriving (Eq, Ord, Show)
-
--- | Defines an environment, which is a map of variables
--- to addresses in the store.
-type CESKEnv = Map ANFVar CESKAddr
-
--- | Defines an address in the store.
-newtype CESKAddr = CESKAddr Integer deriving (Eq, Ord, Show)
-
--- | Defines a store.
-data CESKStore = CESKStore
-  { ceskStoreSpace :: CESKStoreSpace
-  , ceskStoreAddr  :: Integer
-  , ceskStoreSize  :: Integer
-  } deriving (Eq, Ord, Show)
-
--- | Defines the address space in the store.
-type CESKStoreSpace = Map CESKAddr CESKStoreItem
-
--- | Defines an item in the store.
-data CESKStoreItem
-  = CESKStoreVal CESKStoreColor CESKVal
-  | CESKStoreForward CESKAddr
-    deriving (Eq, Ord, Show)
-
--- | Defines the garbage collection state for a value in the store.
-data CESKStoreColor
-  = CESKStoreWhite
-  | CESKStoreBlack
-  | CESKStoreGray
-    deriving (Eq, Ord, Show)
-
--- | Defines a continuation.
-data CESKCont
-  = CESKCont ANFVar ANFExp CESKEnv CESKCont
-  | CESKHalt
-    deriving (Eq, Ord, Show)
-
--- | Defines a value.
-data CESKVal
-  = CESKValVoid
-  | CESKValInt Integer
-  | CESKValFloat Double
-  | CESKValBool Bool
-  | CESKValStr Text
-  | CESKValChar Char
-  | CESKValClos ANFLam CESKEnv
-  | CESKValCont CESKCont
-    deriving (Eq, Ord, Show)
-
--- | Returns a description of a value.
-ceskValDesc :: CESKVal -> Text
-ceskValDesc = \case
-  CESKValVoid  {} -> "void"
-  CESKValInt   {} -> "int"
-  CESKValFloat {} -> "float"
-  CESKValBool  {} -> "bool"
-  CESKValStr   {} -> "str"
-  CESKValChar  {} -> "char"
-  CESKValClos  {} -> "closure"
-  CESKValCont  {} -> "continuation"
-
--- | Defines the arity for an intrinsic function.
-newtype CESKArity = CESKArity Int deriving (Eq, Ord, Show)
-
--- | Defines an intrinsic function.
-data CESKIntrinsic = CESKIntrinsic
-  { ceskIntrinsicName  :: Text
-  , ceskIntrinsicArity :: CESKArity
-  , ceskIntrinsicFunc  :: [CESKVal] -> CESK CESKVal
-  }
-
--- | Defines the initial statistics.
-initialStatistics :: CESKStatistics
-initialStatistics = CESKStatistics
-  { ceskStepCountLimit = 200
-  , ceskStepCountGC    = 0
-  , ceskStepCountTotal = 0
-  }
-
--- | Defines the initial state.
-initialState :: CESKState
-initialState = CESKState
-  { ceskStateExp   = ANFExpAtomic ANFAtomicVoid
-  , ceskStateEnv   = ceskEnvEmpty
-  , ceskStateStore = ceskStoreEmpty
-  , ceskStateCont  = CESKHalt
-  }
-
--- | Defines the initial machine.
-initialMachine :: CESKMachine
-initialMachine = CESKMachine
-  { ceskMachineStatistics = initialStatistics
-  , ceskMachineState      = initialState
-  }
-
--- | Extracts the space from a state.
-stateSpace :: CESKState -> CESKStoreSpace
-stateSpace CESKState{..} = ceskStoreSpace ceskStateStore
-
--- | Modifies the machine statistics.
-modifyStatistics :: (CESKStatistics -> CESKStatistics) -> CESK ()
-modifyStatistics f = modify $ \s -> s
-  { ceskMachineStatistics = f $ ceskMachineStatistics s }
-
--- | Modifies the machine state.
-modifyState :: (CESKState -> CESKState) -> CESK ()
-modifyState f = modify $ \s -> s
-  { ceskMachineState = f $ ceskMachineState s }
 
 -- | Runs an ANF program source code.
 ceskRun :: Text -> IO (Either Text CESKVal)
@@ -299,57 +155,9 @@ evalIntrinsic name aexps = do
   case Map.lookup name intrinsicMap of
     Nothing -> do
       throwError $ "unknown intrinsic: " <> name
-    Just (CESKIntrinsic name arity func) -> do
-      es <- mapM evalAtomic aexps
-      func es `catchError` \_ -> do
-        throwError $ "bad call to " <> name
-
--- | A map of intrinsic functions keyed by name.
-intrinsicMap :: Map Text CESKIntrinsic
-intrinsicMap = Map.fromList $ map (\i -> (ceskIntrinsicName i, i))
-  [ CESKIntrinsic "math-sin" (CESKArity 1) (mathUnary sin)
-  , CESKIntrinsic "math-cos" (CESKArity 1) (mathUnary cos)
-  , CESKIntrinsic "math-tan" (CESKArity 1) (mathUnary tan)
-  , CESKIntrinsic "math-pi" (CESKArity 0) (mathNone pi)
-  ]
-
--- | Runs a math function that takes no argument.
-mathNone :: Double -> [CESKVal] -> CESK CESKVal
-mathNone f = \case
-  [] ->
-    pure $ CESKValFloat f
-  _otherwise ->
-    throwError "bad intrinsic call"
-
--- | Runs a math function that takes one argument.
-mathUnary :: (Double -> Double) -> [CESKVal] -> CESK CESKVal
-mathUnary f = \case
-  (CESKValInt x):[] ->
-    pure $ CESKValFloat $ f $ fromIntegral x
-  (CESKValFloat x):[] ->
-    pure $ CESKValFloat $ f x
-  _otherwise ->
-    throwError "bad intrinsic call"
-
--- | Create declaration wrappers for all the intrinsics.
-ceskIntrinsicWrappers :: CESK [ANFDec]
-ceskIntrinsicWrappers = do
-  forM (Map.elems intrinsicMap) $ \CESKIntrinsic{..} -> do
-    ceskWrapperDec ceskIntrinsicName
-      (T.takeWhileEnd (/='-') ceskIntrinsicName) ceskIntrinsicArity
-
--- | Creates a declaration wrapper for an intrinsic function.
--- The purpose of the wrapper is to provide a more ergonomic
--- name, and to define the name in the environment so it can
--- be overridden.
-ceskWrapperDec :: Text -> Text -> CESKArity -> CESK ANFDec
-ceskWrapperDec name name' (CESKArity x) = do
-  vars <- forM [1..x] $ \i -> do
-    pure $ ANFVar $ "x" <> textShow i
-  pure $ ANFDecDefine (ANFVar name') $
-    ANFExpAtomic (ANFAtomicLam $ ANFLam vars
-      (ANFExpAtomic $ ANFAtomicPrim (ANFPrimFunc name) $
-        map ANFAtomicVar vars))
+    Just (CESKIntrinsic n _ _ f) -> do
+      (mapM evalAtomic aexps >>= f) `catchError` \_ -> do
+        throwError $ "bad call to " <> n
 
 -- | Determines if a primitive is binary.
 primBinary :: ANFPrim -> Bool
@@ -564,10 +372,6 @@ ceskEnvPut var addr = do
   env <- envPut ceskStateEnv var addr
   modifyState $ \s -> s { ceskStateEnv = env }
 
--- | Defines an empty environment.
-envEmpty :: CESKEnv
-envEmpty = Map.empty
-
 -- | Puts a variable in the current environment.
 envPut :: CESKEnv -> ANFVar -> CESKAddr -> CESK CESKEnv
 envPut env var addr = do
@@ -640,14 +444,6 @@ ceskStoreGetItem :: CESKAddr -> CESK CESKStoreItem
 ceskStoreGetItem addr = do
   CESKState{..} <- gets ceskMachineState
   storeGetItem ceskStateStore addr
-
--- | Defines an empty store.
-storeEmpty :: CESKStore
-storeEmpty = CESKStore
-  { ceskStoreSpace = Map.empty
-  , ceskStoreAddr  = 0
-  , ceskStoreSize  = 0
-  }
 
 -- | Allocates a value in a store and returns the
 -- unpdated store and its address.

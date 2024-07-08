@@ -72,14 +72,24 @@ testMath = testCase "math" $ do
 
 testIntrinsic :: Test
 testIntrinsic = testCase "intrinsic" $ do
-  ceskRun "(@math-sin 0.0)" >>=
-    assertEqual "math-sin" (Right $ CESKValFloat 0.0)
-  ceskRun "(@math-cos 0.0)" >>=
-    assertEqual "math-cos" (Right $ CESKValFloat 1.0)
-  ceskRun "(@math-tan 0.0)" >>=
-    assertEqual "math-tan" (Right $ CESKValFloat 0.0)
-  ceskRun "(@math-pi)" >>=
-    assertEqual "math-pi" (Right $ CESKValFloat pi)
+  ceskRun "(@sin 0.0)" >>=
+    assertEqual "sin" (Right $ CESKValFloat 0.0)
+  ceskRun "(@cos 0.0)" >>=
+    assertEqual "cos" (Right $ CESKValFloat 1.0)
+  ceskRun "(@tan 0.0)" >>=
+    assertEqual "tan" (Right $ CESKValFloat 0.0)
+  ceskRun "(@pi)" >>=
+    assertEqual "pi" (Right $ CESKValFloat pi)
+  ceskRun "(@strlen \"abc123\")" >>=
+    assertEqual "strlen" (Right $ CESKValInt 6)
+  ceskRun "(@strchar \"xyz\" 2)" >>=
+    assertEqual "strchar" (Right $ CESKValChar 'z')
+  ceskRun "(void? #void)" >>=
+    assertEqual "void 1" (Right $ CESKValBool True)
+  ceskRun "(void? #\\a)" >>=
+    assertEqual "void 2" (Right $ CESKValBool False)
+  ceskRun [r|(chr? #\a)|] >>=
+    assertEqual "chr" (Right $ CESKValBool True)
 
 testLogical :: Test
 testLogical = testCase "logical" $ do

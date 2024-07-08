@@ -55,7 +55,8 @@ parseChar = parseLexeme $ char '#' *> char '\\' *> anySingle
 
 -- | Paeses a string.
 parseString :: Parser Text
-parseString = fmap T.pack $ char '"' *> manyTill L.charLiteral (char '"')
+parseString = parseLexeme $
+  fmap T.pack $ char '"' *> manyTill L.charLiteral (char '"')
 
 -- | Parses an identifier.
 parseIdentifier :: Parser Text
@@ -63,6 +64,8 @@ parseIdentifier = parseLexeme $ do
   x <- some letterChar
   y <- many $ choice
     [ char '-'
+    , char '?'
+    , char '>'
     , alphaNumChar
     ]
   pure $ T.pack x <> T.pack y
