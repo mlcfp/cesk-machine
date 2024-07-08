@@ -121,6 +121,7 @@ data ANFPrim
   | ANFPrimGE
   | ANFPrimLT
   | ANFPrimLE
+  | ANFPrimFunc Text
     deriving (Eq, Ord, Show)
 
 -- | Parses an ANF program.
@@ -172,7 +173,7 @@ parseAtomic = choice
   , try $ ANFAtomicStr <$> parseString
   , try $ ANFAtomicChar <$> parseChar
   , try $ ANFAtomicLam <$> parseLam
-  , parseParens $ ANFAtomicPrim <$> parsePrim <*> some parseAtomic
+  , parsePrimExp
   ]
 
 -- | Parses a complex expression.
@@ -193,7 +194,10 @@ parseVar = ANFVar <$> parseIdentifier
 parseLam :: Parser ANFLam
 parseLam =
   parseParens $ do
-    void $ parseSymbol "λ"
+    void $ choice
+      [ parseSymbol "λ"
+      , parseSymbol "lambda"
+      ]
     vars <- parseParens $ many parseVar
     exp <- parseExp
     pure $ ANFLam vars exp
@@ -252,20 +256,33 @@ parseLetrec =
     body <- parseExp
     pure $ ANFComplexLetRec bindings body
 
--- | Parses a primary operator.
+-- | Parses a primitive expression.
+parsePrimExp :: Parser ANFAtomic
+parsePrimExp =
+  parseParens $ do
+    op <- parsePrim
+    args <- many parseAtomic
+    pure $ ANFAtomicPrim op args
+
+-- | Parses a primitive operator.
 parsePrim :: Parser ANFPrim
 parsePrim = choice
-  [ ANFPrimNE  <$ parseSymbol "/="
-  , ANFPrimEQ  <$ parseSymbol "="
-  , ANFPrimGE  <$ parseSymbol ">="
-  , ANFPrimGT  <$ parseSymbol ">"
-  , ANFPrimLE  <$ parseSymbol "<="
-  , ANFPrimLT  <$ parseSymbol "<"
-  , ANFPrimAdd <$ parseSymbol "+"
-  , ANFPrimSub <$ parseSymbol "-"
-  , ANFPrimMul <$ parseSymbol "*"
-  , ANFPrimDiv <$ parseSymbol "/"
+  [ ANFPrimNE   <$  parseSymbol "/="
+  , ANFPrimEQ   <$  parseSymbol "="
+  , ANFPrimGE   <$  parseSymbol ">="
+  , ANFPrimGT   <$  parseSymbol ">"
+  , ANFPrimLE   <$  parseSymbol "<="
+  , ANFPrimLT   <$  parseSymbol "<"
+  , ANFPrimAdd  <$  parseSymbol "+"
+  , ANFPrimSub  <$  parseSymbol "-"
+  , ANFPrimMul  <$  parseSymbol "*"
+  , ANFPrimDiv  <$  parseSymbol "/"
+  , ANFPrimFunc <$> parseFunc
   ]
+
+-- | Parses a built-in function.
+parseFunc :: Parser Text
+parseFunc = parseSymbol "@" *> parseIdentifier
 
 -- | Parses an expression.
 parseBool :: Parser Bool
@@ -486,12 +503,13 @@ anfRenderPrim = renderText . \case
   ANFPrimSub -> "-"
   ANFPrimMul -> "*"
   ANFPrimDiv -> "/"
-  ANFPrimEQ  -> "="
-  ANFPrimNE  -> "/="
-  ANFPrimGT  -> ">"
-  ANFPrimGE  -> ">="
-  ANFPrimLT  -> "<"
-  ANFPrimLE  -> "<="
+  ANFPrimEQ -> "="
+  ANFPrimNE -> "/="
+  ANFPrimGT -> ">"
+  ANFPrimGE -> ">="
+  ANFPrimLT -> "<"
+  ANFPrimLE -> "<="
+  ANFPrimFunc name -> "@" <> name
 
 -- | Increases the indentation column.
 indentInc :: ANFRender ()

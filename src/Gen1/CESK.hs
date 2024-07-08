@@ -33,7 +33,7 @@ import Data.Maybe (fromJust)
 import Data.Text (Text)
 import qualified Data.Text as T
 import Control.Monad (forM, forM_, when)
-import Control.Monad.Except (ExceptT(..), runExceptT, throwError)
+import Control.Monad.Except (ExceptT(..), catchError, runExceptT, throwError)
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.State (StateT(..), evalStateT, get, gets, put, modify)
 import Gen1.ANF
@@ -124,7 +124,17 @@ ceskValDesc = \case
   CESKValClos  {} -> "closure"
   CESKValCont  {} -> "continuation"
 
--- TODO change to default instance
+-- | Defines the arity for an intrinsic function.
+newtype CESKArity = CESKArity Int deriving (Eq, Ord, Show)
+
+-- | Defines an intrinsic function.
+data CESKIntrinsic = CESKIntrinsic
+  { ceskIntrinsicName  :: Text
+  , ceskIntrinsicArity :: CESKArity
+  , ceskIntrinsicFunc  :: [CESKVal] -> CESK CESKVal
+  }
+
+-- | Defines the initial statistics.
 initialStatistics :: CESKStatistics
 initialStatistics = CESKStatistics
   { ceskStepCountLimit = 200
@@ -132,6 +142,7 @@ initialStatistics = CESKStatistics
   , ceskStepCountTotal = 0
   }
 
+-- | Defines the initial state.
 initialState :: CESKState
 initialState = CESKState
   { ceskStateExp   = ANFExpAtomic ANFAtomicVoid
@@ -140,6 +151,7 @@ initialState = CESKState
   , ceskStateCont  = CESKHalt
   }
 
+-- | Defines the initial machine.
 initialMachine :: CESKMachine
 initialMachine = CESKMachine
   { ceskMachineStatistics = initialStatistics
@@ -180,8 +192,9 @@ ceskDo x = evalStateT (runExceptT x) initialMachine
 -- | Evaluates an ANF program to a final value
 -- under a CESK machine monad.
 ceskEval :: ANFProg -> CESK CESKVal
-ceskEval prog = do
-  ceskInject prog
+ceskEval (ANFProg decs) = do
+  wappers <- ceskIntrinsicWrappers
+  ceskInject $ ANFProg $ wappers <> decs
   ceskLoop
 
 -- | Loops over the steps until program evalutation is complete.
@@ -271,12 +284,72 @@ evalAtomic atomic = do
       CESKValClos lam . ceskStateEnv <$> gets ceskMachineState
     ANFAtomicVar var -> do
       ceskGetVar var
-    ANFAtomicPrim p [a, b] | primBinary p ->
+    ANFAtomicPrim (ANFPrimFunc name) args -> do
+      evalIntrinsic name args
+    ANFAtomicPrim p [a, b] | primBinary p -> do
       evalBinary p a b
-    ANFAtomicPrim p [a, b] | primLogical p ->
+    ANFAtomicPrim p [a, b] | primLogical p -> do
       evalLogical p a b
-    ANFAtomicPrim prim _args ->
-      throwError $ "bad args for prim " <> textShow prim
+    ANFAtomicPrim p _args -> do
+      throwError $ "bad args for prim " <> textShow p
+
+-- | Evaluates an intrinsic function.
+evalIntrinsic :: Text -> [ANFAtomic] -> CESK CESKVal
+evalIntrinsic name aexps = do
+  case Map.lookup name intrinsicMap of
+    Nothing -> do
+      throwError $ "unknown intrinsic: " <> name
+    Just (CESKIntrinsic name arity func) -> do
+      es <- mapM evalAtomic aexps
+      func es `catchError` \_ -> do
+        throwError $ "bad call to " <> name
+
+-- | A map of intrinsic functions keyed by name.
+intrinsicMap :: Map Text CESKIntrinsic
+intrinsicMap = Map.fromList $ map (\i -> (ceskIntrinsicName i, i))
+  [ CESKIntrinsic "math-sin" (CESKArity 1) (mathUnary sin)
+  , CESKIntrinsic "math-cos" (CESKArity 1) (mathUnary cos)
+  , CESKIntrinsic "math-tan" (CESKArity 1) (mathUnary tan)
+  , CESKIntrinsic "math-pi" (CESKArity 0) (mathNone pi)
+  ]
+
+-- | Runs a math function that takes no argument.
+mathNone :: Double -> [CESKVal] -> CESK CESKVal
+mathNone f = \case
+  [] ->
+    pure $ CESKValFloat f
+  _otherwise ->
+    throwError "bad intrinsic call"
+
+-- | Runs a math function that takes one argument.
+mathUnary :: (Double -> Double) -> [CESKVal] -> CESK CESKVal
+mathUnary f = \case
+  (CESKValInt x):[] ->
+    pure $ CESKValFloat $ f $ fromIntegral x
+  (CESKValFloat x):[] ->
+    pure $ CESKValFloat $ f x
+  _otherwise ->
+    throwError "bad intrinsic call"
+
+-- | Create declaration wrappers for all the intrinsics.
+ceskIntrinsicWrappers :: CESK [ANFDec]
+ceskIntrinsicWrappers = do
+  forM (Map.elems intrinsicMap) $ \CESKIntrinsic{..} -> do
+    ceskWrapperDec ceskIntrinsicName
+      (T.takeWhileEnd (/='-') ceskIntrinsicName) ceskIntrinsicArity
+
+-- | Creates a declaration wrapper for an intrinsic function.
+-- The purpose of the wrapper is to provide a more ergonomic
+-- name, and to define the name in the environment so it can
+-- be overridden.
+ceskWrapperDec :: Text -> Text -> CESKArity -> CESK ANFDec
+ceskWrapperDec name name' (CESKArity x) = do
+  vars <- forM [1..x] $ \i -> do
+    pure $ ANFVar $ "x" <> textShow i
+  pure $ ANFDecDefine (ANFVar name') $
+    ANFExpAtomic (ANFAtomicLam $ ANFLam vars
+      (ANFExpAtomic $ ANFAtomicPrim (ANFPrimFunc name) $
+        map ANFAtomicVar vars))
 
 -- | Determines if a primitive is binary.
 primBinary :: ANFPrim -> Bool
@@ -414,13 +487,13 @@ ceskStep = do
         CESKState exp0 env store $ CESKCont var exp1 env cont
     ANFExpAtomic aexp -> do
       evalAtomic aexp >>= ceskApplyCont
-    ANFExpComplex (ANFComplexApp aexps) ->
+    ANFExpComplex (ANFComplexApp aexps) -> do
       case aexps of
         (arg0:arg1:args) -> do
           proc <- evalAtomic arg0
           vals <- forM (arg1:args) evalAtomic
           ceskApplyProc proc vals
-        _otherwise ->
+        _otherwise -> do
           throwError "bad application"
     ANFExpComplex (ANFComplexIf aexp exp0 exp1) -> do
       evalAtomic aexp >>= \case
@@ -502,9 +575,8 @@ envPut env var addr = do
 
 -- | Gets the address for a variable from the current environment.
 envGet :: CESKEnv -> ANFVar -> CESK CESKAddr
-envGet env var = do
-  maybe (throwError $ "bad var " <> textShow var) pure $
-    Map.lookup var env
+envGet env var@(ANFVar name) = do
+  maybe (throwError $ "bad var: " <> name) pure $ Map.lookup var env
 
 -- | Gets the value for a variable.
 ceskGetVar :: ANFVar -> CESK CESKVal

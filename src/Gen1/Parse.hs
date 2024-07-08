@@ -61,7 +61,10 @@ parseString = fmap T.pack $ char '"' *> manyTill L.charLiteral (char '"')
 parseIdentifier :: Parser Text
 parseIdentifier = parseLexeme $ do
   x <- some letterChar
-  y <- many alphaNumChar
+  y <- many $ choice
+    [ char '-'
+    , alphaNumChar
+    ]
   pure $ T.pack x <> T.pack y
 
 -- | Parses something between parentheses.

@@ -20,6 +20,7 @@ tests = testGroup "CESK"
   [ testVal
   , testVar
   , testMath
+  , testIntrinsic
   , testLogical
   , testChar
   , testDefine
@@ -68,6 +69,17 @@ testMath = testCase "math" $ do
     assertEqual "div float" (Right $ CESKValFloat $ 6 / 7.0)
   ceskRun "(* (+ 1 (- 3.0 2)) 3)" >>=
     assertEqual "complex 2" (Right $ CESKValFloat $ ((3 - 2) + 1) * 3)
+
+testIntrinsic :: Test
+testIntrinsic = testCase "intrinsic" $ do
+  ceskRun "(@math-sin 0.0)" >>=
+    assertEqual "math-sin" (Right $ CESKValFloat 0.0)
+  ceskRun "(@math-cos 0.0)" >>=
+    assertEqual "math-cos" (Right $ CESKValFloat 1.0)
+  ceskRun "(@math-tan 0.0)" >>=
+    assertEqual "math-tan" (Right $ CESKValFloat 0.0)
+  ceskRun "(@math-pi)" >>=
+    assertEqual "math-pi" (Right $ CESKValFloat pi)
 
 testLogical :: Test
 testLogical = testCase "logical" $ do

@@ -132,6 +132,10 @@ testParsePrim = testCase "prim" $ do
     (Right $ expProg $ ANFExpAtomic $ ANFAtomicPrim
       ANFPrimLE [ANFAtomicInt 0, ANFAtomicInt 2])
     (anfParse "(<= 0 2)")
+  assertEqual "built-in 1"
+    (Right $ expProg $ ANFExpAtomic $ ANFAtomicPrim
+      (ANFPrimFunc "sin") [ANFAtomicInt 1])
+    (anfParse "(@sin 1)")
 
 testParseLam :: Test
 testParseLam = testCase "lam" $ do
@@ -139,6 +143,10 @@ testParseLam = testCase "lam" $ do
     (Right $ expProg $ ANFExpAtomic $ ANFAtomicLam
       (ANFLam [ANFVar "n"] (ANFExpAtomic $ ANFAtomicInt 0)))
     (anfParse "(λ (n) 0)")
+  assertEqual "lam keyword"
+    (Right $ expProg $ ANFExpAtomic $ ANFAtomicLam
+      (ANFLam [ANFVar "n"] (ANFExpAtomic $ ANFAtomicInt 0)))
+    (anfParse "(lambda (n) 0)")
   assertEqual "lam multivar"
     (Right $ expProg $ ANFExpAtomic $ ANFAtomicLam
       (ANFLam [ANFVar "n", ANFVar "x", ANFVar "y", ANFVar "ggg"]

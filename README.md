@@ -54,12 +54,19 @@ Name ideas
 
 ## TODO
 
+- rename cont to letk
+- add error codes to cesk machine rather than just text
 - add word values (bytes?)
 - add pair values for cons, lists, etc
+- add array/vector
+- add signed numbers
+- add scientific numbers
 - add `begin` to dec lexer
-- CPS transform (see micinski)
 - tail call optimization
+- add builtins for type test (char?, etc)
+- add builtins for numerics
 - add builtins for IO etc
+- add delimited continuations
 - add ML syntax
 - add type system and type inference
 - add ADT or GADT
@@ -69,6 +76,7 @@ Name ideas
   - async/await
   - virtual threads
   - message passing actors?
+- CPS transform (see micinski)
 - relational programming support
   - microkanren?
 
