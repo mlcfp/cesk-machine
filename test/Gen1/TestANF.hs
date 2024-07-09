@@ -88,6 +88,10 @@ testParsePrim = testCase "prim" $ do
     (Right $ expProg $ ANFExpAtomic $ ANFAtomicPrim
       ANFPrimAdd [ANFAtomicInt 1, ANFAtomicInt 2])
     (anfParse "(+ 1 2)")
+  assertEqual "prim add neg"
+    (Right $ expProg $ ANFExpAtomic $ ANFAtomicPrim
+      ANFPrimAdd [ANFAtomicInt (-1), ANFAtomicInt (-2)])
+    (anfParse "(+ -1 -2)")
   assertEqual "prim sub"
     (Right $ expProg $ ANFExpAtomic $ ANFAtomicPrim
       ANFPrimSub [ANFAtomicInt 44, ANFAtomicInt 3])
@@ -112,6 +116,10 @@ testParsePrim = testCase "prim" $ do
     (Right $ expProg $ ANFExpAtomic $ ANFAtomicPrim
       ANFPrimEQ [ANFAtomicFloat 0, ANFAtomicFloat 2])
     (anfParse "(= 0.0 2.0)")
+  assertEqual "prim eq float neg"
+    (Right $ expProg $ ANFExpAtomic $ ANFAtomicPrim
+      ANFPrimEQ [ANFAtomicFloat (-0.1), ANFAtomicFloat 2.3])
+    (anfParse "(= -0.1 +2.3)")
   assertEqual "prim ne int"
     (Right $ expProg $ ANFExpAtomic $ ANFAtomicPrim
       ANFPrimNE [ANFAtomicInt 0, ANFAtomicInt 2])

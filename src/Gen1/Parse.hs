@@ -43,11 +43,11 @@ parseSymbol = L.symbol spaceConsumer
 
 -- | Parsers an integer.
 parseInteger :: Parser Integer
-parseInteger = parseLexeme L.decimal
+parseInteger = L.signed spaceConsumer $ parseLexeme L.decimal
 
 -- | Parses a floating point number.
 parseDouble :: Parser Double
-parseDouble = parseLexeme L.float
+parseDouble = L.signed spaceConsumer $ parseLexeme L.float
 
 -- | Parsers a single character.
 parseChar :: Parser Char

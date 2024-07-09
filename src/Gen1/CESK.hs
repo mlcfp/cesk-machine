@@ -29,20 +29,20 @@ import Gen1.Types as X
 import Gen1.Util
 
 -- | Runs an ANF program source code.
-ceskRun :: Text -> IO (Either Text CESKVal)
+ceskRun :: Text -> IO (Either CESKError CESKVal)
 ceskRun source =
   case anfParse source of
     Right prog -> do
       ceskExec prog
     Left e -> do
-      pure $ Left e
+      pure . Left $ CESKErrorParse e
 
 -- | Runs an ANF program AST.
-ceskExec :: ANFProg -> IO (Either Text CESKVal)
+ceskExec :: ANFProg -> IO (Either CESKError CESKVal)
 ceskExec = ceskDo . ceskEval
 
 -- | Runs a CESK monad.
-ceskDo :: CESK a -> IO (Either Text a)
+ceskDo :: CESK a -> IO (Either CESKError a)
 ceskDo x = evalStateT (runExceptT x) initialMachine
 
 -- | Evaluates an ANF program to a final value
@@ -91,9 +91,9 @@ ceskInject (ANFProg decs) = do
         , ceskStateCont = CESKHalt
         }
     (_:_) -> do
-      throwError "too many top level expressions"
+      throwError CESKErrorTopLevelMultiple
     [] -> do
-      throwError "top level expression missing"
+      throwError CESKErrorTopLevelNone
 
 -- | Initializes the program declarations.
 ceskInitDecs :: [ANFDec] -> CESK ()
@@ -114,9 +114,9 @@ ceskInitDecs = mapM_ $ \case
   ANFDecDefine var (ANFExpAtomic (ANFAtomicFloat x)) -> do
     ceskPutVar var $ CESKValFloat x
   ANFDecDefine var _ -> do
-    throwError "only lambda or constants allowed in definitions"
+    throwError $ CESKErrorDefinitionBad var
   ANFDecBegin{} -> do
-    throwError "being not yet supported"
+    throwError $ CESKErrorText "begin not yet supported"
   ANFDecExp{} -> do
     pure ()
 
@@ -147,17 +147,17 @@ evalAtomic atomic = do
     ANFAtomicPrim p [a, b] | primLogical p -> do
       evalLogical p a b
     ANFAtomicPrim p _args -> do
-      throwError $ "bad args for prim " <> textShow p
+      throwError $ CESKErrorPrimitiveArgs p
 
 -- | Evaluates an intrinsic function.
 evalIntrinsic :: Text -> [ANFAtomic] -> CESK CESKVal
 evalIntrinsic name aexps = do
   case Map.lookup name intrinsicMap of
     Nothing -> do
-      throwError $ "unknown intrinsic: " <> name
+      throwError $ CESKErrorIntrinsicBad name
     Just (CESKIntrinsic n _ _ f) -> do
       (mapM evalAtomic aexps >>= f) `catchError` \_ -> do
-        throwError $ "bad call to " <> n
+        throwError $ CESKErrorIntrinsicCall n
 
 -- | Determines if a primitive is binary.
 primBinary :: ANFPrim -> Bool
@@ -194,8 +194,9 @@ evalBinary prim aexp1 aexp2 = do
     (CESKValFloat a, CESKValFloat b) -> do
       evalBinaryFloat prim a b
     (a, b) -> do
-      throwError $ "cannot apply primative to " <>
-        ceskValDesc a <> " and " <> ceskValDesc b
+      throwError . CESKErrorPrimitiveBad $
+        "cannot apply primative to " <>
+          ceskValDesc a <> " and " <> ceskValDesc b
 
 -- | Evaluates a binary integer primitive.
 evalBinaryInt :: ANFPrim -> Integer -> Integer -> CESK CESKVal
@@ -205,7 +206,7 @@ evalBinaryInt prim x y = do
     ANFPrimSub -> pure . CESKValInt $ x - y
     ANFPrimMul -> pure . CESKValInt $ x * y
     ANFPrimDiv -> pure . CESKValInt $ x `div` y
-    _otherwise -> throwError $
+    _otherwise -> throwError . CESKErrorPrimitiveBad $
       "bad binary primitive for integers: " <> textShow prim
 
 -- | Evaluates a binary float primitive.
@@ -216,7 +217,7 @@ evalBinaryFloat prim x y = do
     ANFPrimSub -> pure . CESKValFloat $ x - y
     ANFPrimMul -> pure . CESKValFloat $ x * y
     ANFPrimDiv -> pure . CESKValFloat $ x / y
-    _otherwise -> throwError $
+    _otherwise -> throwError . CESKErrorPrimitiveBad $
       "bad binary primitive for floats: " <> textShow prim
 
 -- | Evaluates a logical primitive.
@@ -238,8 +239,9 @@ evalLogical prim aexp1 aexp2 = do
     (CESKValChar a, CESKValChar b) -> do
       evalLogicalChar prim a b
     (a, b) -> do
-      throwError $ "cannot apply primative to " <>
-        ceskValDesc a <> " and " <> ceskValDesc b
+      throwError . CESKErrorPrimitiveBad $
+        "cannot apply primative to " <>
+          ceskValDesc a <> " and " <> ceskValDesc b
 
 -- | Evaluates a logical integer primitive.
 evalLogicalInt :: ANFPrim -> Integer -> Integer -> CESK CESKVal
@@ -251,7 +253,7 @@ evalLogicalInt prim x y = do
     ANFPrimGE -> pure . CESKValBool $ x >= y
     ANFPrimLT -> pure . CESKValBool $ x < y
     ANFPrimLE -> pure . CESKValBool $ x <= y
-    _otherwise -> throwError $
+    _otherwise -> throwError . CESKErrorPrimitiveBad $
       "bad logical primitive for integers: " <> textShow prim
 
 -- | Evaluates a logical integer primitive.
@@ -264,7 +266,7 @@ evalLogicalFloat prim x y = do
     ANFPrimGE -> pure . CESKValBool $ x >= y
     ANFPrimLT -> pure . CESKValBool $ x < y
     ANFPrimLE -> pure . CESKValBool $ x <= y
-    _otherwise -> throwError $
+    _otherwise -> throwError . CESKErrorPrimitiveBad $
       "bad logical primitive for floats: " <> textShow prim
 
 -- | Evaluates a logical boolean primitive.
@@ -273,7 +275,7 @@ evalLogicalBool prim x y = do
   case prim of
     ANFPrimEQ -> pure . CESKValBool $ x == y
     ANFPrimNE -> pure . CESKValBool $ x /= y
-    _otherwise -> throwError $
+    _otherwise -> throwError . CESKErrorPrimitiveBad $
       "bad logical primitive for bools: " <> textShow prim
 
 -- | Evaluates a logical char primitive.
@@ -282,7 +284,7 @@ evalLogicalChar prim x y = do
   case prim of
     ANFPrimEQ -> pure . CESKValBool $ x == y
     ANFPrimNE -> pure . CESKValBool $ x /= y
-    _otherwise -> throwError $
+    _otherwise -> throwError . CESKErrorPrimitiveBad $
       "bad logical primitive for bools: " <> textShow prim
 
 -- | Steps the machine from the current state to the next.
@@ -302,7 +304,7 @@ ceskStep = do
           vals <- forM (arg1:args) evalAtomic
           ceskApplyProc proc vals
         _otherwise -> do
-          throwError "bad application"
+          throwError CESKErrorApplication
     ANFExpComplex (ANFComplexIf aexp exp0 exp1) -> do
       evalAtomic aexp >>= \case
         CESKValBool True ->
@@ -310,7 +312,7 @@ ceskStep = do
         CESKValBool False ->
           modifyState $ const $ CESKState exp1 env store cont
         _otherwise ->
-          throwError "bad if expression"
+          throwError CESKErrorIfExpression
     ANFExpComplex (ANFComplexCallCC aexp) -> do
       f <- evalAtomic aexp
       ceskApplyProc f [CESKValCont cont]
@@ -338,7 +340,7 @@ ceskApplyProc val vals = do
         }
       ceskPutVars vars vals
     _otherwise -> do
-      throwError $ "not a proc: " <> textShow val
+      throwError CESKErrorProcedure
 
 -- | Applies a continuation.
 ceskApplyCont :: CESKVal -> CESK ()
@@ -353,7 +355,7 @@ ceskApplyCont val = do
         }
       ceskPutVar var val
     CESKHalt {} -> do
-      throwError "cannot apply halt"
+      throwError CESKErrorHaltApplication
 
 -- | Defines an empty environment.
 ceskEnvEmpty :: CESKEnv
@@ -379,8 +381,8 @@ envPut env var addr = do
 
 -- | Gets the address for a variable from the current environment.
 envGet :: CESKEnv -> ANFVar -> CESK CESKAddr
-envGet env var@(ANFVar name) = do
-  maybe (throwError $ "bad var: " <> name) pure $ Map.lookup var env
+envGet env var = do
+  maybe (throwError $ CESKErrorVar var) pure $ Map.lookup var env
 
 -- | Gets the value for a variable.
 ceskGetVar :: ANFVar -> CESK CESKVal
@@ -393,8 +395,8 @@ ceskPutVar var val = ceskStoreAlloc val CESKStoreWhite >>= ceskEnvPut var
 -- | Defines a set of variables and corresponding values by allocating
 -- the value in the store and defining the variable in the environment.
 ceskPutVars :: [ANFVar] -> [CESKVal] -> CESK ()
-ceskPutVars (_:_) [] = throwError "missing vals"
-ceskPutVars [] (_:_) = throwError "missing vars"
+ceskPutVars (_:_) [] = throwError CESKErrorMissingVals
+ceskPutVars [] (_:_) = throwError CESKErrorMissingVars
 ceskPutVars [] [] = pure ()
 ceskPutVars (var:vars) (val:vals) = do
   ceskPutVar var val
@@ -463,7 +465,7 @@ storeAlloc CESKStore{..} val color =
 storeFree :: CESKStore -> CESKAddr -> CESK CESKStore
 storeFree CESKStore{..} addr
   | Map.notMember addr ceskStoreSpace = do
-      throwError $ "free bad addr " <> textShow addr
+      throwError $ CESKErrorFreeBad addr
   | otherwise = do
       pure CESKStore
         { ceskStoreSpace = Map.delete addr ceskStoreSpace
@@ -488,15 +490,15 @@ storeGetVal store addr = do
   storeGetItem store addr >>= \case
     CESKStoreVal _color val -> do
       pure val
-    CESKStoreForward _addr -> do
-      throwError "bad store value"
+    CESKStoreForward a -> do
+      throwError $ CESKErrorUnexpectedForward a
 
 -- | Gets an item from a store.
 storeGetItem :: CESKStore -> CESKAddr -> CESK CESKStoreItem
 storeGetItem CESKStore{..} addr = do
   case Map.lookup addr ceskStoreSpace of
     Nothing -> do
-      throwError $ "bad address " <> textShow addr
+      throwError $ CESKErrorAddressBad addr
     Just item -> do
       pure item
 
@@ -574,8 +576,8 @@ ceskScavenge storeFrom storeTo =
     Just (addr, CESKStoreVal _ val) -> do
       to' <- storePutItem storeTo addr $ blackVal val
       ceskScavenge storeFrom to'
-    Just (_, CESKStoreForward _) -> do
-      throwError "forward found while scavenging"
+    Just (_, CESKStoreForward a) -> do
+      throwError $ CESKErrorUnexpectedForward a
     Nothing -> do
       pure (storeFrom, storeTo)
   where
@@ -594,7 +596,7 @@ ceskColor (CESKState exp env (CESKStore space supply size) cont) color = do
     CESKStoreVal CESKStoreBlack val -> do
       pure $ CESKStoreVal color val
     CESKStoreVal c _ -> do
-      throwError $ "bad color " <> textShow c
-    CESKStoreForward _ -> do
-      throwError "forward found while recoloring"
+      throwError $ CESKErrorUnexpectedColor c
+    CESKStoreForward a -> do
+      throwError $ CESKErrorUnexpectedForward a
   pure $ CESKState exp env (CESKStore space' supply size) cont

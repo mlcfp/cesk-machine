@@ -55,7 +55,6 @@ Name ideas
 ## TODO
 
 - rename cont to letk
-- add error codes to cesk machine rather than just text
 - add word values (bytes?)
 - add pair values for cons, lists, etc
 - add array/vector
@@ -63,8 +62,6 @@ Name ideas
 - add scientific numbers
 - add `begin` to dec lexer
 - tail call optimization
-- add builtins for type test (char?, etc)
-- add builtins for numerics
 - add builtins for IO etc
 - add delimited continuations
 - add ML syntax
@@ -92,3 +89,6 @@ Name ideas
 - garbage collector
 - top level defines
 - add string and char values
+- add builtins for type test (char?, etc)
+- add builtins for numerics
+- add error codes to cesk machine rather than just text

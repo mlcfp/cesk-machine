@@ -8,6 +8,7 @@ module Gen1.Types
   , CESKArity(..)
   , CESKCont(..)
   , CESKEnv
+  , CESKError(..)
   , CESKIntrinsic(..)
   , CESKMachine(..)
   , CESKState(..)
@@ -18,6 +19,7 @@ module Gen1.Types
   , CESKStoreSpace
   , CESKVal(..)
   , envEmpty
+  , ceskErrorHumanize
   , ceskValDesc
   , initialStatistics
   , initialState
@@ -41,7 +43,7 @@ import Gen1.ANF
 import Gen1.Util
 
 -- | Defines the execution monad.
-type CESK = ExceptT Text (StateT CESKMachine IO)
+type CESK = ExceptT CESKError (StateT CESKMachine IO)
 
 -- | Defines the evaluation state.
 data CESKMachine = CESKMachine
@@ -120,7 +122,7 @@ ceskValDesc = \case
   CESKValInt   {} -> "int"
   CESKValFloat {} -> "float"
   CESKValBool  {} -> "bool"
-  CESKValStr   {} -> "str"
+  CESKValStr   {} -> "string"
   CESKValChar  {} -> "char"
   CESKValClos  {} -> "closure"
   CESKValCont  {} -> "continuation"
@@ -189,3 +191,74 @@ storeEmpty = CESKStore
 -- | Prints text to the console.
 println :: Text -> CESK ()
 println = liftIO . putStrLn . T.unpack
+
+-- | Defines an error.
+data CESKError
+  = CESKErrorParse Text
+  | CESKErrorTopLevelNone
+  | CESKErrorTopLevelMultiple
+  | CESKErrorDefinitionBad ANFVar
+  | CESKErrorIntrinsicBad Text
+  | CESKErrorIntrinsicCall Text
+  | CESKErrorIntrinsicArgs
+  | CESKErrorPrimitiveArgs ANFPrim
+  | CESKErrorPrimitiveBad Text
+  | CESKErrorVar ANFVar
+  | CESKErrorApplication
+  | CESKErrorIfExpression
+  | CESKErrorProcedure
+  | CESKErrorHaltApplication
+  | CESKErrorMissingVars
+  | CESKErrorMissingVals
+  | CESKErrorAddressBad CESKAddr
+  | CESKErrorFreeBad CESKAddr
+  | CESKErrorUnexpectedForward CESKAddr
+  | CESKErrorUnexpectedColor CESKStoreColor
+  | CESKErrorText Text
+    deriving (Eq, Ord, Show)
+
+-- | Renders an error in human compatible form.
+ceskErrorHumanize :: CESKError -> Text
+ceskErrorHumanize = \case
+  CESKErrorParse message ->
+    message
+  CESKErrorTopLevelNone ->
+    "top level expression missing"
+  CESKErrorTopLevelMultiple ->
+    "too many top level expressions"
+  CESKErrorDefinitionBad (ANFVar name) ->
+    "bad definition: " <> name
+  CESKErrorIntrinsicBad name ->
+    "bad intrinsic: " <> name
+  CESKErrorIntrinsicCall name ->
+    "bad call to " <> name
+  CESKErrorIntrinsicArgs ->
+    "bad intrinsic call"
+  CESKErrorPrimitiveBad message ->
+    message
+  CESKErrorPrimitiveArgs prim ->
+    "bad args for primitive " <> textShow prim
+  CESKErrorVar (ANFVar name) ->
+    "bad var " <> name
+  CESKErrorApplication ->
+    "bad application"
+  CESKErrorIfExpression ->
+    "bad if expression"
+  CESKErrorProcedure ->
+    "bad procedure"
+  CESKErrorHaltApplication ->
+    "cannot apply halt"
+  CESKErrorMissingVars ->
+    "missing vars"
+  CESKErrorMissingVals ->
+    "missing vals"
+  CESKErrorAddressBad addr ->
+    "bad address " <> textShow addr
+  CESKErrorFreeBad addr ->
+    "free bad addr " <> textShow addr
+  CESKErrorUnexpectedForward addr ->
+    "unexpected forward " <> textShow addr
+  CESKErrorUnexpectedColor color ->
+    "unexpected color " <> textShow color
+  CESKErrorText message ->
+    message

@@ -76,7 +76,7 @@ mathNone f = \case
   [] ->
     pure $ CESKValFloat f
   _otherwise ->
-    throwError "bad intrinsic call"
+    throwError CESKErrorIntrinsicArgs
 
 -- | Runs a math function that takes one argument.
 mathUnary :: (Double -> Double) -> [CESKVal] -> CESK CESKVal
@@ -86,7 +86,7 @@ mathUnary f = \case
   (CESKValFloat x):[] ->
     pure $ CESKValFloat $ f x
   _otherwise ->
-    throwError "bad intrinsic call"
+    throwError CESKErrorIntrinsicArgs
 
 -- | String length intrinsic.
 strLen :: [CESKVal] -> CESK CESKVal
@@ -94,7 +94,7 @@ strLen = \case
   (CESKValStr x):[] ->
     pure $ CESKValInt $ fromIntegral $ T.length x
   _otherwise ->
-    throwError "bad intrinsic call"
+    throwError CESKErrorIntrinsicArgs
 
 -- | String element access intrinsic.
 strChar :: [CESKVal] -> CESK CESKVal
@@ -102,7 +102,7 @@ strChar = \case
   (CESKValStr x):(CESKValInt i):[] ->
     pure $ CESKValChar $ T.index x $ fromIntegral i
   _otherwise ->
-    throwError "bad intrinsic call"
+    throwError CESKErrorIntrinsicArgs
 
 -- | Tests whether a value is a char.
 testChar :: [CESKVal] -> CESK CESKVal
@@ -112,7 +112,7 @@ testChar = \case
   (_:[]) ->
     pure $ CESKValBool False
   _otherwise ->
-    throwError "bad intrinsic call"
+    throwError CESKErrorIntrinsicArgs
 
 -- | Tests whether a value is a string.
 testStr :: [CESKVal] -> CESK CESKVal
@@ -122,7 +122,7 @@ testStr = \case
   (_:[]) ->
     pure $ CESKValBool False
   _otherwise ->
-    throwError "bad intrinsic call"
+    throwError CESKErrorIntrinsicArgs
 
 -- | Tests whether a value is an integer.
 testInt :: [CESKVal] -> CESK CESKVal
@@ -132,7 +132,7 @@ testInt = \case
   (_:[]) ->
     pure $ CESKValBool False
   _otherwise ->
-    throwError "bad intrinsic call"
+    throwError CESKErrorIntrinsicArgs
 
 -- | Tests whether a value is a float.
 testFloat :: [CESKVal] -> CESK CESKVal
@@ -142,7 +142,7 @@ testFloat = \case
   (_:[]) ->
     pure $ CESKValBool False
   _otherwise ->
-    throwError "bad intrinsic call"
+    throwError CESKErrorIntrinsicArgs
 
 -- | Tests whether a value is a boolean.
 testBool :: [CESKVal] -> CESK CESKVal
@@ -152,7 +152,7 @@ testBool = \case
   (_:[]) ->
     pure $ CESKValBool False
   _otherwise ->
-    throwError "bad intrinsic call"
+    throwError CESKErrorIntrinsicArgs
 
 -- | Tests whether a value is a void.
 testVoid :: [CESKVal] -> CESK CESKVal
@@ -162,4 +162,4 @@ testVoid = \case
   (_:[]) ->
     pure $ CESKValBool False
   _otherwise ->
-    throwError "bad intrinsic call"
+    throwError CESKErrorIntrinsicArgs
