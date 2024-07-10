@@ -126,147 +126,147 @@ data ANFPrim
 
 -- | Parses an ANF program.
 anfParse :: Text -> Either Text ANFProg
-anfParse = mapLeft renderError . runParser parseProg ""
+anfParse = mapLeft renderError . runParser anfParseProg ""
 
 -- | Parses a program.
-parseProg :: Parser ANFProg
-parseProg = spaceConsumer >> (ANFProg <$> some parseDec)
+anfParseProg :: Parser ANFProg
+anfParseProg = spaceConsumer >> (ANFProg <$> some anfParseDec)
 
 -- | Parses a declaration.
-parseDec :: Parser ANFDec
-parseDec = choice
-  [ try parseDefine
-  , try parseBegin
-  , ANFDecExp <$> parseExp
+anfParseDec :: Parser ANFDec
+anfParseDec = choice
+  [ try anfParseDefine
+  , try anfParseBegin
+  , ANFDecExp <$> anfParseExp
   ]
 
 -- | Parses a definition.
-parseDefine :: Parser ANFDec
-parseDefine =
+anfParseDefine :: Parser ANFDec
+anfParseDefine =
   parseParens $ do
     void $ parseSymbol "define"
-    ANFDecDefine <$> parseVar <*> parseExp
+    ANFDecDefine <$> anfParseVar <*> anfParseExp
 
 -- | Parses a begin.
-parseBegin :: Parser ANFDec
-parseBegin =
+anfParseBegin :: Parser ANFDec
+anfParseBegin =
   parseParens $ do
     void $ parseSymbol "begin"
-    ANFDecBegin <$> many parseDec
+    ANFDecBegin <$> many anfParseDec
 
 -- | Parses an expression.
-parseExp :: Parser ANFExp
-parseExp = choice
-  [ try $ ANFExpAtomic <$> parseAtomic
-  , try $ ANFExpComplex <$> parseComplex
-  , parseLet
+anfParseExp :: Parser ANFExp
+anfParseExp = choice
+  [ try $ ANFExpAtomic <$> anfParseAtomic
+  , try $ ANFExpComplex <$> anfParseComplex
+  , anfParseLet
   ]
 
 -- | Parses an atomic expression.
-parseAtomic :: Parser ANFAtomic
-parseAtomic = choice
-  [ try $ ANFAtomicBool <$> parseBool
-  , try $ ANFAtomicVoid <$ parseVoid
-  , try $ ANFAtomicVar <$> parseVar
+anfParseAtomic :: Parser ANFAtomic
+anfParseAtomic = choice
+  [ try $ ANFAtomicBool <$> anfParseBool
+  , try $ ANFAtomicVoid <$ anfParseVoid
+  , try $ ANFAtomicVar <$> anfParseVar
   , try $ ANFAtomicFloat <$> parseDouble
   , try $ ANFAtomicInt <$> parseInteger
   , try $ ANFAtomicStr <$> parseString
   , try $ ANFAtomicChar <$> parseChar
-  , try $ ANFAtomicLam <$> parseLam
-  , parsePrimExp
+  , try $ ANFAtomicLam <$> anfParseLam
+  , anfParsePrimExp
   ]
 
 -- | Parses a complex expression.
-parseComplex :: Parser ANFComplex
-parseComplex = choice
-  [ try parseIf
-  , try parseCallCC
-  , try parseSet
-  , try parseLetrec
-  , parseApp
+anfParseComplex :: Parser ANFComplex
+anfParseComplex = choice
+  [ try anfParseIf
+  , try anfParseCallCC
+  , try anfParseSet
+  , try anfParseLetrec
+  , anfParseApp
   ]
 
 -- | Parses a variable name.
-parseVar :: Parser ANFVar
-parseVar = ANFVar <$> parseIdentifier
+anfParseVar :: Parser ANFVar
+anfParseVar = ANFVar <$> parseIdentifier
 
 -- | Parses a lambda form.
-parseLam :: Parser ANFLam
-parseLam =
+anfParseLam :: Parser ANFLam
+anfParseLam =
   parseParens $ do
     void $ choice
       [ parseSymbol "λ"
       , parseSymbol "lambda"
       ]
-    vars <- parseParens $ many parseVar
-    exp <- parseExp
+    vars <- parseParens $ many anfParseVar
+    exp <- anfParseExp
     pure $ ANFLam vars exp
 
 -- | Parses an if expression.
-parseIf :: Parser ANFComplex
-parseIf =
+anfParseIf :: Parser ANFComplex
+anfParseIf =
   parseParens $ do
     void $ parseSymbol "if"
-    ANFComplexIf <$> parseAtomic <*> parseExp <*> parseExp
+    ANFComplexIf <$> anfParseAtomic <*> anfParseExp <*> anfParseExp
 
 -- | Parses a call/cc form.
-parseCallCC :: Parser ANFComplex
-parseCallCC =
+anfParseCallCC :: Parser ANFComplex
+anfParseCallCC =
   parseParens $ do
     void $ parseSymbol "call/cc"
-    ANFComplexCallCC <$> parseAtomic
+    ANFComplexCallCC <$> anfParseAtomic
 
 -- | Parses a mutation.
-parseSet :: Parser ANFComplex
-parseSet =
+anfParseSet :: Parser ANFComplex
+anfParseSet =
   parseParens $ do
     void $ parseSymbol "set!"
-    ANFComplexSet <$> parseVar <*> parseAtomic
+    ANFComplexSet <$> anfParseVar <*> anfParseAtomic
 
 -- | Parses an application.
-parseApp :: Parser ANFComplex
-parseApp = parseParens $ ANFComplexApp <$> some parseAtomic
+anfParseApp :: Parser ANFComplex
+anfParseApp = parseParens $ ANFComplexApp <$> many anfParseAtomic
 
 -- | Parses a binding.
-parseBinding :: Parser ANFBind
-parseBinding = parseParens $ ANFBind <$> parseVar <*> parseAtomic
+anfParseBinding :: Parser ANFBind
+anfParseBinding = parseParens $ ANFBind <$> anfParseVar <*> anfParseAtomic
 
 -- | Parses a let expression.
-parseLet :: Parser ANFExp
-parseLet =
+anfParseLet :: Parser ANFExp
+anfParseLet =
   parseParens $ do
     void $ parseSymbol "let"
     void $ parseSymbol "("
     void $ parseSymbol "("
-    var <- parseVar
-    exp <- parseExp
+    var <- anfParseVar
+    exp <- anfParseExp
     void $ parseSymbol ")"
     void $ parseSymbol ")"
-    body <- parseExp
+    body <- anfParseExp
     pure $ ANFExpLet var exp body
 
 -- | Parses a letrec expression.
-parseLetrec :: Parser ANFComplex
-parseLetrec =
+anfParseLetrec :: Parser ANFComplex
+anfParseLetrec =
   parseParens $ do
     void $ parseSymbol "letrec"
     void $ parseSymbol "("
-    bindings <- some parseBinding
+    bindings <- some anfParseBinding
     void $ parseSymbol ")"
-    body <- parseExp
+    body <- anfParseExp
     pure $ ANFComplexLetRec bindings body
 
 -- | Parses a primitive expression.
-parsePrimExp :: Parser ANFAtomic
-parsePrimExp =
+anfParsePrimExp :: Parser ANFAtomic
+anfParsePrimExp =
   parseParens $ do
-    op <- parsePrim
-    args <- many parseAtomic
+    op <- anfParsePrim
+    args <- many anfParseAtomic
     pure $ ANFAtomicPrim op args
 
 -- | Parses a primitive operator.
-parsePrim :: Parser ANFPrim
-parsePrim = choice
+anfParsePrim :: Parser ANFPrim
+anfParsePrim = choice
   [ ANFPrimNE   <$  parseSymbol "/="
   , ANFPrimEQ   <$  parseSymbol "="
   , ANFPrimGE   <$  parseSymbol ">="
@@ -277,31 +277,31 @@ parsePrim = choice
   , ANFPrimSub  <$  parseSymbol "-"
   , ANFPrimMul  <$  parseSymbol "*"
   , ANFPrimDiv  <$  parseSymbol "/"
-  , ANFPrimFunc <$> parseFunc
+  , ANFPrimFunc <$> anfParseFunc
   ]
 
 -- | Parses a built-in function.
-parseFunc :: Parser Text
-parseFunc = do
+anfParseFunc :: Parser Text
+anfParseFunc = do
   a <- parseSymbol "@"
   b <- parseIdentifier
   pure $ a <> b
 
 -- | Parses an expression.
-parseBool :: Parser Bool
-parseBool = try (True <$ parseTrue) <|> (False <$ parseFalse)
+anfParseBool :: Parser Bool
+anfParseBool = try (True <$ anfParseTrue) <|> (False <$ anfParseFalse)
 
 -- | Parses a true literal.
-parseTrue :: Parser ()
-parseTrue = void $ try (parseSymbol "#true") <|> parseSymbol "#t"
+anfParseTrue :: Parser ()
+anfParseTrue = void $ try (parseSymbol "#true") <|> parseSymbol "#t"
 
 -- | Parses a false literal.
-parseFalse :: Parser ()
-parseFalse = void $ try (parseSymbol "#false") <|> parseSymbol "#f"
+anfParseFalse :: Parser ()
+anfParseFalse = void $ try (parseSymbol "#false") <|> parseSymbol "#f"
 
 -- | Parses a void literal.
-parseVoid :: Parser ()
-parseVoid = void $ try (parseSymbol "#void") <|> parseSymbol "#v"
+anfParseVoid :: Parser ()
+anfParseVoid = void $ try (parseSymbol "#void") <|> parseSymbol "#v"
 
 -- | Defines the render style.
 data ANFRenderStyle

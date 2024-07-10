@@ -113,6 +113,8 @@ data CESKVal
   | CESKValChar Char
   | CESKValClos ANFLam CESKEnv
   | CESKValCont CESKCont
+  | CESKValNull
+  | CESKValPair CESKVal CESKVal
     deriving (Eq, Ord, Show)
 
 -- | Returns a description of a value.
@@ -126,9 +128,16 @@ ceskValDesc = \case
   CESKValChar  {} -> "char"
   CESKValClos  {} -> "closure"
   CESKValCont  {} -> "continuation"
+  CESKValNull  {} -> "null"
+  CESKValPair  {} -> "pair"
 
 -- | Defines the arity for an intrinsic function.
-newtype CESKArity = CESKArity Int deriving (Eq, Ord, Show)
+-- Fixed specifies a set number of arguments to the function.
+-- Any specifies an unlimited number of arguments.
+data CESKArity
+  = CESKArityFixed Int
+  | CESKArityAny
+    deriving (Eq, Ord, Show)
 
 -- | Defines an intrinsic function.
 data CESKIntrinsic = CESKIntrinsic

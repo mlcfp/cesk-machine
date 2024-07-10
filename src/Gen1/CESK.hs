@@ -299,10 +299,10 @@ ceskStep = do
       evalAtomic aexp >>= ceskApplyCont
     ANFExpComplex (ANFComplexApp aexps) -> do
       case aexps of
-        (arg0:arg1:args) -> do
-          proc <- evalAtomic arg0
-          vals <- forM (arg1:args) evalAtomic
-          ceskApplyProc proc vals
+        (arg0:args) -> do
+          func <- evalAtomic arg0
+          vals <- forM args evalAtomic
+          ceskApplyProc func vals
         _otherwise -> do
           throwError CESKErrorApplication
     ANFExpComplex (ANFComplexIf aexp exp0 exp1) -> do

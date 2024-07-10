@@ -80,16 +80,16 @@ testIntrinsic = testCase "intrinsic" $ do
     assertEqual "tan" (Right $ CESKValFloat 0.0)
   ceskRun "(@pi)" >>=
     assertEqual "pi" (Right $ CESKValFloat pi)
-  ceskRun "(@strlen \"abc123\")" >>=
+  ceskRun "(@string-length \"abc123\")" >>=
     assertEqual "strlen" (Right $ CESKValInt 6)
-  ceskRun "(@strchar \"xyz\" 2)" >>=
+  ceskRun "(@string-char \"xyz\" 2)" >>=
     assertEqual "strchar" (Right $ CESKValChar 'z')
   ceskRun "(void? #void)" >>=
     assertEqual "void 1" (Right $ CESKValBool True)
   ceskRun "(void? #\\a)" >>=
     assertEqual "void 2" (Right $ CESKValBool False)
-  ceskRun [r|(chr? #\a)|] >>=
-    assertEqual "chr" (Right $ CESKValBool True)
+  ceskRun [r|(char? #\a)|] >>=
+    assertEqual "char" (Right $ CESKValBool True)
 
 testLogical :: Test
 testLogical = testCase "logical" $ do

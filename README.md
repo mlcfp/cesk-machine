@@ -54,13 +54,13 @@ Name ideas
 
 ## TODO
 
-- rename cont to letk
-- add word values (bytes?)
 - add pair values for cons, lists, etc
-- add array/vector
-- add signed numbers
+- refactor GC and store into lib using polymorphism and typeclasses
 - add scientific numbers
 - add `begin` to dec lexer
+- rename cont to letk
+- add word values (bytes?)
+- add array/vector
 - tail call optimization
 - add builtins for IO etc
 - add delimited continuations
@@ -92,3 +92,4 @@ Name ideas
 - add builtins for type test (char?, etc)
 - add builtins for numerics
 - add error codes to cesk machine rather than just text
+- add signed numbers

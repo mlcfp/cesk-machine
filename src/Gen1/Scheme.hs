@@ -368,10 +368,23 @@ parseVar = SchemeVar <$> choice
   [ try $ parseSymbol "+"
   , try $ parseSymbol "-"
   , try $ parseSymbol "*"
+  , try $ parseSymbol "/="
   , try $ parseSymbol "/"
   , try $ parseSymbol "="
+  , try $ parseSymbol ">="
+  , try $ parseSymbol ">"
+  , try $ parseSymbol "<="
+  , try $ parseSymbol "<"
+  , try parseIntrinsic
   , parseIdentifier
   ]
+
+-- | Parses a built-in function.
+parseIntrinsic :: Parser Text
+parseIntrinsic = do
+  a <- parseSymbol "@"
+  b <- parseIdentifier
+  pure $ a <> b
 
 -- | Parses a lambda form.
 parseLam :: Parser SchemeExp
