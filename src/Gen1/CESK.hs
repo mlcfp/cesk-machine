@@ -115,8 +115,8 @@ ceskInitDecs = mapM_ $ \case
     ceskPutVar var $ CESKValFloat x
   ANFDecDefine var _ -> do
     throwError $ CESKErrorDefinitionBad var
-  ANFDecBegin{} -> do
-    throwError $ CESKErrorText "begin not yet supported"
+  ANFDecBegin decs -> do
+    ceskInitDecs decs
   ANFDecExp{} -> do
     pure ()
 

@@ -32,6 +32,8 @@ import Text.Megaparsec
 import Text.Megaparsec.Char
 import qualified Text.Megaparsec.Char.Lexer as L
 
+-- BNF grammar for ANF
+--
 -- <prog> ::= <dec> ...
 --
 -- <dec> ::=  (define <var> <exp>)

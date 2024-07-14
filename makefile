@@ -4,6 +4,8 @@
 
 EXEC_NAME = cesk-machine
 
+.PHONY: test
+
 build:
 	stack build
 
@@ -16,3 +18,6 @@ run:
 
 profile:
 	stack --profile run $(EXEC_NAME) --rts-options -p
+
+test:
+	stack test

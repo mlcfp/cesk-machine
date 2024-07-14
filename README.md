@@ -1,34 +1,11 @@
 # CESK Machine
 
-BNF grammar for ANF
-
-```
-<prog> ::= <dec> ...
-
-<dec> ::=  (define <var> <exp>)
-        |  (begin <dec> ...)
-        |  <exp>
-
-lam ::= (λ (var1 ... varN) exp)
-
-aexp ::=  lam
-       |  var
-       |  #t  |  #f
-       |  integer
-       |  (prim aexp1 ... aexpN)
-
-cexp ::=  (aexp0 aexp1 ... aexpN)
-       |  (if aexp exp exp)
-       |  (call/cc aexp)
-       |  (set! var aexp)
-       |  (letrec ((var1 aexp1) ... (varN aexpN)) exp)
-
-exp ::=  aexp
-      |  cexp
-      |  (let ((var exp)) exp)
-
-prim ::=  +  |  -  |  *  |  =
-```
+The purpose of this project is to explore the CESK machine as an
+interpreter for functional languages and continuations for advanced
+control flow.  The project should culminate with
+the implementation of a ML style, statically typed functional
+language that runs on the CESK machine.  In the end, the interpreters
+should be suitable for small, general purpose programs.
 
 ## References
 
@@ -41,38 +18,26 @@ Matthias Felleisen invented the CESK machine.
 
 - [Principles of Programming Languages](https://felleisen.org/matthias/4400-s20/index.html)
 
-This presentation had a nice diagram for the garbage collector.
+This presentation has a nice diagram for two-space garbage collection.
 
 - [Copying Garbage Collection](https://users.cs.northwestern.edu/~stamourv/teaching/321-F19/16a-gc-copying.pdf)
 
 
-## New Functional Language
-
-Name ideas
-- Havoc
-- Mahem (could be abbreviate `mh` which is close to `ml`)
-
 ## TODO
 
-- add pair values for cons, lists, etc
-- refactor GC and store into lib using polymorphism and typeclasses
-- add scientific numbers
-- add `begin` to dec lexer
-- rename cont to letk
+- clean up compile warnings
+- clean up main
 - add word values (bytes?)
 - add array/vector
 - tail call optimization
 - add builtins for IO etc
+- add intrinsics for date and time
 - add delimited continuations
+- add repl
 - add ML syntax
 - add type system and type inference
-- add ADT or GADT
-- modules
 - exceptions
 - concurrency
-  - async/await
-  - virtual threads
-  - message passing actors?
 - CPS transform (see micinski)
 - relational programming support
   - microkanren?
@@ -93,3 +58,5 @@ Name ideas
 - add builtins for numerics
 - add error codes to cesk machine rather than just text
 - add signed numbers
+- add pair values for cons, lists, etc
+- add `begin` to dec lexer

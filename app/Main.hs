@@ -19,7 +19,7 @@ main = do
   t0 <- getCurrentTime
   putStrLn $ show t0
 
-  -- a <- ceskRun "(+ 1 2)"
+  -- a <- ceskRun "(+ 1 -2e3)"
   -- putStrLn $ show a
   -- a <- ceskRun "(pi)"
   -- putStrLn $ show a
@@ -37,8 +37,13 @@ main = do
   -- putStrLn $ show a
   -- a <- normalizePretty [r|(cons "x" (cons 2 (cons 1 (null))))|] >>= ceskRun
   -- putStrLn $ show a
-
-  a <- normalizePretty [r|(list "x" 2 1 "aa")|]
+  -- a <- normalizePretty [r|(list "x" 2 1 "aa")|]
+  -- putStrLn $ show a
+  -- a <- ceskRun a
+  -- putStrLn $ show a
+  -- a <- ceskRun "(string-make (@cons #\\a (@null)))"
+  a <- normalizePretty [r|
+    (string-part (string-make (cons #\x (cons #\b (cons #\a (@null))))) 0 2) |]
   putStrLn $ show a
   a <- ceskRun a
   putStrLn $ show a
@@ -46,8 +51,8 @@ main = do
 
 normalizePretty :: Text -> IO Text
 normalizePretty p = do
-  let x = schemeParse p
-  putStrLn $ show x
+  -- let x = schemeParse p
+  -- putStrLn $ show x
   let Right ast = schemeParse p
   normalizeProg ast >>= schemeRender schemeRenderOptions
     { schemeRenderOptionStyle = SchemeRenderNormal }

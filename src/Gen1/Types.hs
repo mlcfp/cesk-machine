@@ -223,7 +223,7 @@ data CESKError
   | CESKErrorFreeBad CESKAddr
   | CESKErrorUnexpectedForward CESKAddr
   | CESKErrorUnexpectedColor CESKStoreColor
-  | CESKErrorText Text
+  | CESKErrorListValue Text
     deriving (Eq, Ord, Show)
 
 -- | Renders an error in human compatible form.
@@ -269,5 +269,5 @@ ceskErrorHumanize = \case
     "unexpected forward " <> textShow addr
   CESKErrorUnexpectedColor color ->
     "unexpected color " <> textShow color
-  CESKErrorText message ->
-    message
+  CESKErrorListValue val ->
+    "bad value in list: " <> val

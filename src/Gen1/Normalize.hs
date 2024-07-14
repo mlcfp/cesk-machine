@@ -46,6 +46,7 @@ atomic = \case
   SchemeExpFloat {} -> True
   SchemeExpBool  {} -> True
   SchemeExpStr   {} -> True
+  SchemeExpChar  {} -> True
   _otherwise        -> False
 
 -- | Normalizes a term.
@@ -89,7 +90,7 @@ normalize exp k = case exp of
   _otherwise | atomic exp -> do
     k exp
   _otherwise -> do
-    liftIO $ putStrLn $ "_otherwise " <> show exp
+    liftIO $ putStrLn $ "bad normalization expression: " <> show exp
     pure SchemeExpVoid
 
 -- | Normalizes a name in a scheme expression.

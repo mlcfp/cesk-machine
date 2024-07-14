@@ -65,6 +65,12 @@ intrinsicMap = Map.fromList $ map (\(n, p, a, f) ->
 
   , ("@string-length", "string-length", 1, strLen)
   , ("@string-char", "string-char", 2, strChar)
+  , ("@string-upper", "string-upper", 1, strUpper)
+  , ("@string-lower", "string-lower", 1, strLower)
+  , ("@string-list", "string-list", 1, strList)
+  , ("@string-make", "string-make", 1, strMake)
+  , ("@string-append", "string-append", 2, strAppend)
+  , ("@string-part", "string-part", 3, strPart)
 
   , ("@char?", "char?", 1, testChar)
   , ("@string?", "string?", 1, testStr)
@@ -79,6 +85,7 @@ intrinsicMap = Map.fromList $ map (\(n, p, a, f) ->
   , ("@cons", "cons", 2, pairCons)
   , ("@head", "head", 1, pairHead)
   , ("@tail", "tail", 1, pairTail)
+  -- Do not make a wrapper for list, since the arity is variable.
   , ("@list", "list", -1, pairList)
   ]
 
@@ -111,6 +118,66 @@ strChar :: [CESKVal] -> CESK CESKVal
 strChar = \case
   (CESKValStr x):(CESKValInt i):[] ->
     pure $ CESKValChar $ T.index x $ fromIntegral i
+  _otherwise ->
+    throwError CESKErrorIntrinsicArgs
+
+-- | String uppercase intrinsic.
+strUpper :: [CESKVal] -> CESK CESKVal
+strUpper = \case
+  (CESKValStr x):[] ->
+    pure $ CESKValStr $ T.toUpper x
+  _otherwise ->
+    throwError CESKErrorIntrinsicArgs
+
+-- | String lowercase intrinsic.
+strLower :: [CESKVal] -> CESK CESKVal
+strLower = \case
+  (CESKValStr x):[] ->
+    pure $ CESKValStr $ T.toLower x
+  _otherwise ->
+    throwError CESKErrorIntrinsicArgs
+
+-- | String to list intrinsic.
+strList :: [CESKVal] -> CESK CESKVal
+strList = \case
+  (CESKValStr x):[] ->
+    pure $ go $ T.unpack x
+  _otherwise ->
+    throwError CESKErrorIntrinsicArgs
+  where
+    go :: String -> CESKVal
+    go [] = CESKValNull
+    go (c:cs) = CESKValPair (CESKValChar c) (go cs)
+
+-- | String from list intrinsic.
+strMake :: [CESKVal] -> CESK CESKVal
+strMake = \case
+  CESKValNull:[] ->
+    pure $ CESKValStr T.empty
+  (x@CESKValPair{}):[] ->
+    CESKValStr . T.pack <$> go x
+  _otherwise ->
+    throwError CESKErrorIntrinsicArgs
+  where
+    go :: CESKVal -> CESK String
+    go = \case
+      CESKValNull -> pure []
+      CESKValPair (CESKValChar c) x -> go x >>= (\s -> pure $ c : s)
+      val -> throwError $ CESKErrorListValue $ textShow val
+
+-- | String append intrinsic.
+strAppend :: [CESKVal] -> CESK CESKVal
+strAppend = \case
+  (CESKValStr x):(CESKValStr y):[] ->
+    pure $ CESKValStr $ x <> y
+  _otherwise ->
+    throwError CESKErrorIntrinsicArgs
+
+-- | String part selection intrinsic.
+strPart :: [CESKVal] -> CESK CESKVal
+strPart = \case
+  (CESKValStr x):(CESKValInt i):(CESKValInt j):[] ->
+    pure $ CESKValStr $ T.take (fromIntegral j) $ T.drop (fromIntegral i) x
   _otherwise ->
     throwError CESKErrorIntrinsicArgs
 
