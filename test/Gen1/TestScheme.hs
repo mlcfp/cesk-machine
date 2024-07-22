@@ -119,7 +119,7 @@ schemeRun code = do
     Right prog -> do
       prog' <- normalizeProg prog
       code' <- schemeRender schemeRenderOptions prog'
-      ceskRun code'
+      ceskRun ceskDefaultOptions code'
 
 schemeExec code = do
   case schemeParse code of
@@ -131,4 +131,4 @@ schemeExec code = do
         Left e2 ->
           error $ T.unpack e2
         Right p2 ->
-          ceskExec p2
+          ceskExec' p2

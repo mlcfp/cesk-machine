@@ -4,9 +4,12 @@
 
 module Gen1.CESK
   ( ceskDo
+  , ceskDo'
   , ceskExec
+  , ceskExec'
   , ceskGarbageCollect
   , ceskRun
+  , ceskRun'
   , storeAlloc
   , storeEmpty
   , storePutVal
@@ -14,6 +17,7 @@ module Gen1.CESK
   ) where
 
 import Prelude hiding (exp)
+import Control.Monad.Extra (ifM)
 import Data.Either.Combinators (mapRight)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
@@ -29,28 +33,42 @@ import Gen1.Types as X
 import Gen1.Util
 
 -- | Runs an ANF program source code.
-ceskRun :: Text -> IO (Either CESKError CESKVal)
-ceskRun source =
+ceskRun :: CESKOptions -> Text -> IO (Either CESKError CESKVal)
+ceskRun options source =
   case anfParse source of
     Right prog -> do
-      ceskExec prog
+      ceskExec options prog
     Left e -> do
       pure . Left $ CESKErrorParse e
 
+-- | Runs an ANF program source code.
+ceskRun' :: Text -> IO (Either CESKError CESKVal)
+ceskRun' = ceskRun ceskDefaultOptions
+
 -- | Runs an ANF program AST.
-ceskExec :: ANFProg -> IO (Either CESKError CESKVal)
-ceskExec = ceskDo . ceskEval
+ceskExec :: CESKOptions -> ANFProg -> IO (Either CESKError CESKVal)
+ceskExec o = ceskDo o . ceskEval
+
+-- | Runs an ANF program AST.
+ceskExec' :: ANFProg -> IO (Either CESKError CESKVal)
+ceskExec' = ceskExec ceskDefaultOptions
 
 -- | Runs a CESK monad.
-ceskDo :: CESK a -> IO (Either CESKError a)
-ceskDo x = evalStateT (runExceptT x) initialMachine
+ceskDo :: CESKOptions -> CESK a -> IO (Either CESKError a)
+ceskDo o x = evalStateT (runExceptT x)
+  ceskDefaultMachine { ceskMachineOptions = o }
+
+-- | Runs a CESK monad.
+ceskDo' :: CESK a -> IO (Either CESKError a)
+ceskDo' = ceskDo ceskDefaultOptions
 
 -- | Evaluates an ANF program to a final value
 -- under a CESK machine monad.
 ceskEval :: ANFProg -> CESK CESKVal
 ceskEval (ANFProg decs) = do
-  wappers <- ceskIntrinsicWrappers
-  ceskInject $ ANFProg $ wappers <> decs
+  wrappers <- ifM (gets $ ceskOptionIntrinsicBindings . ceskMachineOptions)
+    ceskIntrinsicWrappers $ pure []
+  ceskInject $ ANFProg $ wrappers <> decs
   ceskLoop
 
 -- | Loops over the steps until program evalutation is complete.

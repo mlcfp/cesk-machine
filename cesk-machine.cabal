@@ -58,8 +58,10 @@ library
       base >=4.7 && <5
     , containers
     , either
+    , extra
     , megaparsec
     , mtl
+    , optparse-applicative
     , raw-strings-qq
     , text
     , time
@@ -91,6 +93,7 @@ executable cesk-machine
     , cesk-machine
     , containers
     , either
+    , extra
     , megaparsec
     , mtl
     , optparse-applicative
@@ -135,8 +138,10 @@ test-suite cesk-machine-test
     , cesk-machine
     , containers
     , either
+    , extra
     , megaparsec
     , mtl
+    , optparse-applicative
     , raw-strings-qq
     , test-framework
     , test-framework-hunit

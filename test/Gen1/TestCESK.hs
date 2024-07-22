@@ -6,6 +6,7 @@ module Gen1.TestCESK
   ( tests
   ) where
 
+import Data.Text (Text)
 import qualified Data.Text as T
 import Gen1.CESK
 import Gen1.Normalize
@@ -27,99 +28,105 @@ tests = testGroup "CESK"
   , testANFFactorial
   ]
 
+run :: Text -> IO (Either CESKError CESKVal)
+run = ceskRun'
+
+runBind :: Text -> IO (Either CESKError CESKVal)
+runBind = ceskRun ceskDefaultOptions { ceskOptionIntrinsicBindings = True }
+
 testVal :: Test
 testVal = testCase "val" $ do
-  ceskRun "0" >>=
+  run "0" >>=
     assertEqual "int" (Right $ CESKValInt 0)
-  ceskRun "#t" >>=
+  run "#t" >>=
     assertEqual "true" (Right $ CESKValBool True)
-  ceskRun "#f" >>=
+  run "#f" >>=
     assertEqual "false" (Right $ CESKValBool False)
 
 testVar :: Test
 testVar = testCase "var" $ do
-  ceskRun "(letrec (( y  1 )) y )" >>=
+  run "(letrec (( y  1 )) y )" >>=
     assertEqual "var 1" (Right $ CESKValInt 1)
-  ceskRun "(letrec((y #t))y)" >>=
+  run "(letrec((y #t))y)" >>=
     assertEqual "var 2" (Right $ CESKValBool True)
-  ceskRun "(let ((y 1)) y)" >>=
+  run "(let ((y 1)) y)" >>=
     assertEqual "var 3" (Right $ CESKValInt 1)
-  ceskRun "(let ((y 8)) (* 2 y))" >>=
+  run "(let ((y 8)) (* 2 y))" >>=
     assertEqual "var 4" (Right $ CESKValInt 16)
 
 testMath :: Test
 testMath = testCase "math" $ do
-  ceskRun "(+ 66 788)" >>=
+  run "(+ 66 788)" >>=
     assertEqual "add" (Right $ CESKValInt 854)
-  ceskRun "(- 66 788)" >>=
+  run "(- 66 788)" >>=
     assertEqual "sub" (Right $ CESKValInt (-722))
-  ceskRun "(* 6 6)" >>=
+  run "(* 6 6)" >>=
     assertEqual "mul" (Right $ CESKValInt 36)
-  ceskRun "(/ 6 3)" >>=
+  run "(/ 6 3)" >>=
     assertEqual "div" (Right $ CESKValInt 2)
-  ceskRun "(/ 6 7)" >>=
+  run "(/ 6 7)" >>=
     assertEqual "div" (Right $ CESKValInt 0)
-  ceskRun "(* (+ 1 (- 3 2)) 3)" >>=
+  run "(* (+ 1 (- 3 2)) 3)" >>=
     assertEqual "complex 1" (Right $ CESKValInt 6)
-  ceskRun "(+ 6.6 78.8)" >>=
+  run "(+ 6.6 78.8)" >>=
     assertEqual "add float" (Right $ CESKValFloat $ 6.6 + 78.8)
-  ceskRun "(* 6 7.2)" >>=
+  run "(* 6 7.2)" >>=
     assertEqual "mul float" (Right $ CESKValFloat $ 6 * 7.2)
-  ceskRun "(/ 6 7.0)" >>=
+  run "(/ 6 7.0)" >>=
     assertEqual "div float" (Right $ CESKValFloat $ 6 / 7.0)
-  ceskRun "(* (+ 1 (- 3.0 2)) 3)" >>=
+  run "(* (+ 1 (- 3.0 2)) 3)" >>=
     assertEqual "complex 2" (Right $ CESKValFloat $ ((3 - 2) + 1) * 3)
 
 testIntrinsic :: Test
 testIntrinsic = testCase "intrinsic" $ do
-  ceskRun "(@sin 0.0)" >>=
+  run "(@sin 0.0)" >>=
     assertEqual "sin" (Right $ CESKValFloat 0.0)
-  ceskRun "(@cos 0.0)" >>=
+  run "(@cos 0.0)" >>=
     assertEqual "cos" (Right $ CESKValFloat 1.0)
-  ceskRun "(@tan 0.0)" >>=
+  run "(@tan 0.0)" >>=
     assertEqual "tan" (Right $ CESKValFloat 0.0)
-  ceskRun "(@pi)" >>=
+  run "(@pi)" >>=
     assertEqual "pi" (Right $ CESKValFloat pi)
-  ceskRun "(@string-length \"abc123\")" >>=
+  run "(@string-length \"abc123\")" >>=
     assertEqual "strlen" (Right $ CESKValInt 6)
-  ceskRun "(@string-char \"xyz\" 2)" >>=
+  run "(@string-char \"xyz\" 2)" >>=
     assertEqual "strchar" (Right $ CESKValChar 'z')
-  ceskRun "(void? #void)" >>=
+  runBind "(void? #void)" >>=
     assertEqual "void 1" (Right $ CESKValBool True)
-  ceskRun "(void? #\\a)" >>=
+  runBind "(void? #\\a)" >>=
     assertEqual "void 2" (Right $ CESKValBool False)
-  ceskRun [r|(char? #\a)|] >>=
+  runBind [r|(char? #\a)|] >>=
     assertEqual "char" (Right $ CESKValBool True)
 
 testLogical :: Test
 testLogical = testCase "logical" $ do
-  ceskRun "(> 1 2)" >>=
+  run "(> 1 2)" >>=
     assertEqual "gt" (Right $ CESKValBool False)
-  ceskRun "(< 1 2)" >>=
+  run "(< 1 2)" >>=
     assertEqual "lt" (Right $ CESKValBool True)
-  ceskRun "(>= 1 2)" >>=
+  run "(>= 1 2)" >>=
     assertEqual "ge" (Right $ CESKValBool False)
-  ceskRun "(<= 1 2)" >>=
+  run "(<= 1 2)" >>=
     assertEqual "le" (Right $ CESKValBool True)
-  ceskRun "(= 1 2)" >>=
+  run "(= 1 2)" >>=
     assertEqual "le" (Right $ CESKValBool False)
-  ceskRun "(/= 1 2)" >>=
+  run "(/= 1 2)" >>=
     assertEqual "le" (Right $ CESKValBool True)
 
 testChar :: Test
 testChar = testCase "char" $ do
-  ceskRun "(= #\\a #\\b)" >>=
+  run "(= #\\a #\\b)" >>=
     assertEqual "eq" (Right $ CESKValBool False)
-  ceskRun "(= #\\@ #\\@)" >>=
+  run "(= #\\@ #\\@)" >>=
     assertEqual "eq" (Right $ CESKValBool True)
 
 testDefine :: Test
 testDefine = testCase "define" $ do
-  ceskRun "(define y 1) y" >>=
+  run "(define y 1) y" >>=
     assertEqual "define 1" (Right $ CESKValInt 1)
-  ceskRun "(define y (λ (n) (* 2 n))) (y 4)" >>=
+  run "(define y (λ (n) (* 2 n))) (y 4)" >>=
     assertEqual "define 2" (Right $ CESKValInt 8)
-  ceskRun [r|
+  run [r|
       (define y (λ (n) (* 2 n)))
       (define g (λ (x) (+ x 1)))
       (define sqr (λ (a) (* a a)))
@@ -131,7 +138,7 @@ testDefine = testCase "define" $ do
 
 testANFFactorial :: Test
 testANFFactorial = testCase "anf factorial" $ do
-  ceskRun [r|
+  run [r|
     #| factorial version 1 |#
     (letrec ((f
       (λ (n)
@@ -145,7 +152,7 @@ testANFFactorial = testCase "anf factorial" $ do
     (f 20))
   |] >>=
       assertEqual "ver 1" (Right $ CESKValInt 2432902008176640000)
-  ceskRun [r|
+  run [r|
     (define factorial (λ (x)
       (letrec ((f
         (λ (n)
@@ -160,7 +167,7 @@ testANFFactorial = testCase "anf factorial" $ do
       (factorial r0))
   |] >>=
     assertEqual "ver 2" (Right $ CESKValInt 720)
-  ceskRun [r|
+  run [r|
     (define f (λ (n)
       (let ((g0 (= n 0)))
         (if g0

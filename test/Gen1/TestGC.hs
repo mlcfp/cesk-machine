@@ -29,7 +29,7 @@ aBool = ANFExpAtomic . ANFAtomicBool
 
 testOneEnv :: Test
 testOneEnv = testCase "one env" $ do
-  Right (addr, state, stateEvac, state') <- ceskDo $ do
+  Right (addr, state, stateEvac, state') <- ceskDo' $ do
     (store, addr) <- storeAlloc storeEmpty CESKValVoid CESKStoreWhite
     let exp = aBool False
     let env = Map.fromList [(ANFVar "x", addr)]
@@ -50,7 +50,7 @@ testOneEnv = testCase "one env" $ do
 testOneCont :: Test
 testOneCont = testCase "one cont" $ do
   let val = CESKValInt 6
-  Right (addr, state, stateEvac, state') <- ceskDo $ do
+  Right (addr, state, stateEvac, state') <- ceskDo' $ do
     (store, addr) <- storeAlloc storeEmpty val CESKStoreWhite
     let exp = aBool False
     let env = Map.fromList [(ANFVar "x", addr)]
@@ -71,7 +71,7 @@ testOneCont = testCase "one cont" $ do
 
 testContCycle :: Test
 testContCycle = testCase "cont cycle" $ do
-  Right (state, stateEvac, state') <- ceskDo $ do
+  Right (state, stateEvac, state') <- ceskDo' $ do
     (store0, addr0) <- storeAlloc storeEmpty CESKValVoid CESKStoreWhite
     (store1, addr1) <- storeAlloc store0 CESKValVoid CESKStoreWhite
     (store2, addr2) <- storeAlloc store1 CESKValVoid CESKStoreWhite
@@ -125,7 +125,7 @@ testContCycle = testCase "cont cycle" $ do
 
 testClosCycle :: Test
 testClosCycle = testCase "clos cycle" $ do
-  Right (state, stateEvac, state') <- ceskDo $ do
+  Right (state, stateEvac, state') <- ceskDo' $ do
     (store0, addr0) <- storeAlloc storeEmpty CESKValVoid CESKStoreWhite
     (store1, addr1) <- storeAlloc store0 CESKValVoid CESKStoreWhite
     (store2, addr2) <- storeAlloc store1 CESKValVoid CESKStoreWhite

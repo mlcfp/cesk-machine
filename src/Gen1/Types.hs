@@ -11,6 +11,7 @@ module Gen1.Types
   , CESKError(..)
   , CESKIntrinsic(..)
   , CESKMachine(..)
+  , CESKOptions(..)
   , CESKState(..)
   , CESKStatistics(..)
   , CESKStore(..)
@@ -19,11 +20,13 @@ module Gen1.Types
   , CESKStoreSpace
   , CESKVal(..)
   , envEmpty
+  , ceskDefaultMachine
+  , ceskDefaultOptions
+  , ceskDefaultState
+  , ceskDefaultStatistics
   , ceskErrorHumanize
   , ceskValDesc
-  , initialStatistics
-  , initialState
-  , initialMachine
+  , ceskValHumanize
   , modifyStatistics
   , modifyState
   , println
@@ -47,8 +50,14 @@ type CESK = ExceptT CESKError (StateT CESKMachine IO)
 
 -- | Defines the evaluation state.
 data CESKMachine = CESKMachine
-  { ceskMachineStatistics :: CESKStatistics
+  { ceskMachineOptions    :: CESKOptions
+  , ceskMachineStatistics :: CESKStatistics
   , ceskMachineState      :: CESKState
+  } deriving (Eq, Ord, Show)
+
+-- | Defines options for the execution of the machine.
+data CESKOptions = CESKOptions
+  { ceskOptionIntrinsicBindings :: Bool
   } deriving (Eq, Ord, Show)
 
 -- | Defines various statistics used to monitor and control
@@ -147,17 +156,23 @@ data CESKIntrinsic = CESKIntrinsic
   , ceskIntrinsicFunc   :: [CESKVal] -> CESK CESKVal
   }
 
+-- | Defines the initial optins.
+ceskDefaultOptions :: CESKOptions
+ceskDefaultOptions = CESKOptions
+  { ceskOptionIntrinsicBindings = False
+  }
+
 -- | Defines the initial statistics.
-initialStatistics :: CESKStatistics
-initialStatistics = CESKStatistics
+ceskDefaultStatistics :: CESKStatistics
+ceskDefaultStatistics = CESKStatistics
   { ceskStepCountLimit = 200
   , ceskStepCountGC    = 0
   , ceskStepCountTotal = 0
   }
 
 -- | Defines the initial state.
-initialState :: CESKState
-initialState = CESKState
+ceskDefaultState :: CESKState
+ceskDefaultState = CESKState
   { ceskStateExp   = ANFExpAtomic ANFAtomicVoid
   , ceskStateEnv   = envEmpty
   , ceskStateStore = storeEmpty
@@ -165,10 +180,11 @@ initialState = CESKState
   }
 
 -- | Defines the initial machine.
-initialMachine :: CESKMachine
-initialMachine = CESKMachine
-  { ceskMachineStatistics = initialStatistics
-  , ceskMachineState      = initialState
+ceskDefaultMachine :: CESKMachine
+ceskDefaultMachine = CESKMachine
+  { ceskMachineOptions    = ceskDefaultOptions
+  , ceskMachineStatistics = ceskDefaultStatistics
+  , ceskMachineState      = ceskDefaultState
   }
 
 -- | Extracts the space from a state.
@@ -271,3 +287,27 @@ ceskErrorHumanize = \case
     "unexpected color " <> textShow color
   CESKErrorListValue val ->
     "bad value in list: " <> val
+
+-- | Renders a value in human compatible form.
+ceskValHumanize :: CESKVal -> Text
+ceskValHumanize val = case val of
+  CESKValVoid ->
+    "#void"
+  CESKValInt integer ->
+    textShow integer
+  CESKValFloat double ->
+    textShow double
+  CESKValBool bool ->
+    if bool then "#t" else "#f"
+  CESKValStr string ->
+    string
+  CESKValChar char ->
+    T.singleton char
+  CESKValClos{} ->
+    ceskValDesc val
+  CESKValCont{} ->
+    ceskValDesc val
+  CESKValNull ->
+    "'()"
+  CESKValPair a b ->
+    "(" <> ceskValHumanize a <> " . " <> ceskValHumanize b <> ")"
