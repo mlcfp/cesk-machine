@@ -62,6 +62,7 @@ library
     , megaparsec
     , mtl
     , optparse-applicative
+    , pretty-show
     , raw-strings-qq
     , text
     , time
@@ -97,6 +98,7 @@ executable cesk-machine
     , megaparsec
     , mtl
     , optparse-applicative
+    , pretty-show
     , raw-strings-qq
     , text
     , time
@@ -142,6 +144,7 @@ test-suite cesk-machine-test
     , megaparsec
     , mtl
     , optparse-applicative
+    , pretty-show
     , raw-strings-qq
     , test-framework
     , test-framework-hunit

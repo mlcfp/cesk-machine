@@ -14,6 +14,7 @@ import Test.Framework (Test, testGroup)
 import Test.Framework.Providers.HUnit (testCase)
 import Test.HUnit (assertEqual)
 import Text.RawString.QQ
+import Text.Show.Pretty (pPrint)
 
 tests :: Test
 tests = testGroup "Gen1.Normalize"
@@ -153,5 +154,7 @@ factorialNormal = [r|(define f (λ (n)
 normalizePretty :: Text -> IO Text
 normalizePretty p = do
   let Right ast = schemeParse p
-  normalizeProg ast >>= schemeRender schemeRenderOptions
+  norm <- normalizeProg ast
+  schemeRender schemeRenderOptions
     { schemeRenderOptionStyle = SchemeRenderPretty }
+    norm

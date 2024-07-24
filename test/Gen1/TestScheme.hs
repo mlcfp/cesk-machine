@@ -17,10 +17,41 @@ import Text.RawString.QQ
 
 tests :: Test
 tests = testGroup "Gen1.Scheme"
-  [ testParseFactorial
+  [ testParseDefine
+  , testParseFactorial
   , testPrintFactorial
   , testRunFactorial
   ]
+
+testParseDefine :: Test
+testParseDefine = testCase "parse define" $ do
+  assertEqual "define 1"
+    (Right (SchemeProg
+      [SchemeDecExp (SchemeExpApp
+        [ SchemeExpVar (SchemeVar "+")
+        , SchemeExpInt 1
+        , SchemeExpVar (SchemeVar "x")
+        ])
+      ]))
+    $ schemeParse [r|(+ 1 x)|]
+  assertEqual "define 2"
+    (Right (SchemeProg
+      [ SchemeDecFunc (SchemeVar "h") [SchemeVar "x"]
+        (SchemeExpApp
+          [ SchemeExpVar (SchemeVar "+")
+          , SchemeExpInt 1
+          , SchemeExpVar (SchemeVar "x")
+          ])
+      , SchemeDecExp (SchemeExpApp
+        [ SchemeExpVar (SchemeVar "-")
+        , SchemeExpInt 1
+        , SchemeExpApp
+          [ SchemeExpVar (SchemeVar "h")
+          , SchemeExpInt 2
+          ]
+        ])
+      ]))
+    $ schemeParse [r|(define (h x) (+ 1 x)) (- 1 (h 2))|]
 
 testParseFactorial :: Test
 testParseFactorial = testCase "parse factorial" $ do

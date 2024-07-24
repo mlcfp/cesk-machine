@@ -351,14 +351,15 @@ parseExp = choice
   , try parseIf
   , try parseSet
   , try parseCallCC
-  , try $ SchemeExpVar <$> parseVar
-  , try $ SchemeExpInt <$> parseInteger
-  , try $ SchemeExpFloat <$> parseDouble
   , try $ SchemeExpBool True <$ parseTrue
   , try $ SchemeExpBool False <$ parseFalse
   , try $ SchemeExpStr <$> parseString
   , try $ SchemeExpChar <$> parseChar
   , try $ SchemeExpVoid <$ parseVoid
+  -- Parse vars before numbers, so that primary operators for
+  -- plus and minus are not confused as signs on number.
+  , try $ SchemeExpVar <$> parseVar
+  , try parseNumber
   , parseApp
   ]
 
@@ -443,6 +444,15 @@ parseLetrec = parseParens $ do
   void $ parseSymbol ")"
   body <- parseExp
   pure $ SchemeExpLetRec bindings body
+
+-- | Parses a number.
+-- Note that float should be parsed before integer, since it
+-- has richer structure.
+parseNumber :: Parser SchemeExp
+parseNumber = choice
+  [ try $ SchemeExpFloat <$> parseDouble
+  , try $ SchemeExpInt <$> parseInteger
+  ]
 
 -- | Parses a true literal.
 parseTrue :: Parser ()

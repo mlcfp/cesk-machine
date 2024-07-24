@@ -10,6 +10,7 @@ module Gen1.Types
   , CESKEnv
   , CESKError(..)
   , CESKIntrinsic(..)
+  , CESKIntrinsicFunc
   , CESKMachine(..)
   , CESKOptions(..)
   , CESKState(..)
@@ -58,12 +59,14 @@ data CESKMachine = CESKMachine
 -- | Defines options for the execution of the machine.
 data CESKOptions = CESKOptions
   { ceskOptionIntrinsicBindings :: Bool
+  , ceskOptionTraceState        :: Bool
   } deriving (Eq, Ord, Show)
 
 -- | Defines various statistics used to monitor and control
 -- the machine.
 data CESKStatistics = CESKStatistics
   { ceskStepCountLimit :: Integer
+  -- ^ The step count at which to perform garbage collection.
   , ceskStepCountGC    :: Integer
   , ceskStepCountTotal :: Integer
   } deriving (Eq, Ord, Show)
@@ -148,18 +151,22 @@ data CESKArity
   | CESKArityAny
     deriving (Eq, Ord, Show)
 
+-- | Defines the signature for an intrinsic function.
+type CESKIntrinsicFunc = [CESKVal] -> CESK CESKVal
+
 -- | Defines an intrinsic function.
 data CESKIntrinsic = CESKIntrinsic
   { ceskIntrinsicName   :: Text
   , ceskIntrinsicPublic :: Text
   , ceskIntrinsicArity  :: CESKArity
-  , ceskIntrinsicFunc   :: [CESKVal] -> CESK CESKVal
+  , ceskIntrinsicFunc   :: CESKIntrinsicFunc
   }
 
 -- | Defines the initial optins.
 ceskDefaultOptions :: CESKOptions
 ceskDefaultOptions = CESKOptions
   { ceskOptionIntrinsicBindings = False
+  , ceskOptionTraceState        = False
   }
 
 -- | Defines the initial statistics.

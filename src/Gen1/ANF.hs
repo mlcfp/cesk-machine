@@ -165,6 +165,8 @@ anfParseExp = choice
   ]
 
 -- | Parses an atomic expression.
+-- Note that float should be parsed before integer, since it
+-- has richer structure.
 anfParseAtomic :: Parser ANFAtomic
 anfParseAtomic = choice
   [ try $ ANFAtomicBool <$> anfParseBool

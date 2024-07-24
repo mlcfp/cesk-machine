@@ -46,6 +46,7 @@ dependencies:
 - megaparsec
 - mtl
 - optparse-applicative
+- pretty-show
 - raw-strings-qq
 - text
 - time

@@ -19,6 +19,7 @@ import Gen1.Normalize
 import Gen1.Scheme
 import Options.Applicative
 
+-- | Defines the application main.
 main :: IO ()
 main = do
   Args{..} <- readArgs
@@ -35,60 +36,39 @@ normalizePretty p = do
   normalizeProg ast >>= schemeRender schemeRenderOptions
     { schemeRenderOptionStyle = SchemeRenderNormal }
 
+-- | Defines the command line arguments.
 data Args = Args
   { argBindings   :: Bool
   , argSourceFile :: Text
   }
 
+-- | Reads the command line arguments.
 readArgs :: IO Args
 readArgs = execParser $ info (parseArgs <**> helper) fullDesc
 
+-- | Parses command line arguments.
 parseArgs :: Parser Args
 parseArgs = Args
   <$> parseBindings
   <*> parseSourceFile
 
+-- | Parses the bindings flag.
 parseBindings :: Parser Bool
 parseBindings = switch $ long "bindings" <> short 'b'
   <> help "Create bindings for intrinsic functions"
 
+-- | Parses the source file argument.
 parseSourceFile :: Parser Text
 parseSourceFile = argument str (metavar "FILE")
 
-
-
--- schemeParse :: Text -> Either Text SchemeProg
-
--- normalizeProg :: SchemeProg -> IO SchemeProg
-
--- schemeANF :: SchemeProg -> Either Text ANFProg
-
--- ceskExec :: CESKOptions -> ANFProg -> IO (Either CESKError CESKVal)
-
-
--- schemeRun :: Text -> IO (Either Text Text)
--- schemeRun code = do
---   case schemeParse code of
---     Left e0 -> do
---       error $ T.unpack e0
---     Right prog -> do
---       prog' <- normalizeProg prog
---       case schemeANF prog' of
---         Left e2 ->
---           error $ T.unpack e2
---         Right p2 ->
---           ceskExec ceskDefaultOptions p2 >>= \case
---             Left e3 ->
---               pure $ Left $ ceskErrorHumanize e3
---             Right val ->
---               pure $ Right $ ceskValHumanize val
-
+-- | Runs a scheme file.
 schemeRunFile :: Text -> IO ()
 schemeRunFile path = do
   TIO.readFile (T.unpack path) >>= schemeRun >>= either
     (putStrLn . ("ERROR: "<>) . T.unpack)
     (putStrLn . T.unpack)
 
+-- | Runs scheme source code and get humanized results.
 schemeRun :: Text -> IO (Either Text Text)
 schemeRun code = runExceptT $ do
   prog <- ExceptT $ pure $ schemeParse code

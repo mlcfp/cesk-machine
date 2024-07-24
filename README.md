@@ -26,7 +26,6 @@ This presentation has a nice diagram for two-space garbage collection.
 ## TODO
 
 - clean up compile warnings
-- clean up main
 - add word values (bytes?)
 - add array/vector
 - tail call optimization
@@ -39,8 +38,6 @@ This presentation has a nice diagram for two-space garbage collection.
 - exceptions
 - concurrency
 - CPS transform (see micinski)
-- relational programming support
-  - microkanren?
 
 ## DONE
 
