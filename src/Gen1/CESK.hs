@@ -18,6 +18,7 @@ module Gen1.CESK
 
 import Prelude hiding (exp)
 import Control.Monad.Extra (ifM)
+import Control.Monad.IO.Class (liftIO)
 import Data.Either.Combinators (mapRight)
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
@@ -31,6 +32,7 @@ import Gen1.ANF
 import Gen1.Intrinsic
 import Gen1.Types as X
 import Gen1.Util
+import Text.Show.Pretty (pPrint)
 
 -- | Runs an ANF program source code.
 ceskRun :: CESKOptions -> Text -> IO (Either CESKError CESKVal)
@@ -74,9 +76,12 @@ ceskEval (ANFProg decs) = do
 -- | Loops over the steps until program evalutation is complete.
 ceskLoop :: CESK CESKVal
 ceskLoop = do
+  CESKOptions{..} <- gets ceskMachineOptions
   CESKState{..} <- gets ceskMachineState
+  when ceskOptionTraceState $ do
+    get >>= liftIO . pPrint
   case ceskStateExp of
-    ANFExpAtomic aexp | ceskStateCont == CESKHalt -> do
+    ANFExpAtomic aexp | ceskStateCont == CESKContHalt -> do
       evalAtomic aexp
     _otherwise -> do
       ceskStep >> ceskAdmin >> ceskLoop
@@ -106,7 +111,7 @@ ceskInject (ANFProg decs) = do
     (exp:[]) -> do
       modifyState $ \s -> s
         { ceskStateExp = exp
-        , ceskStateCont = CESKHalt
+        , ceskStateCont = CESKContHalt
         }
     (_:_) -> do
       throwError CESKErrorTopLevelMultiple
@@ -308,15 +313,25 @@ evalLogicalChar prim x y = do
 -- | Steps the machine from the current state to the next.
 ceskStep :: CESK ()
 ceskStep = do
-  CESKState exp env store cont <- gets ceskMachineState
-  case exp of
+  CESKState{..} <- gets ceskMachineState
+  case ceskStateExp of
     ANFExpLet var exp0 exp1 -> do
-      modifyState $ const $
-        CESKState exp0 env store $ CESKCont var exp1 env cont
+      modifyState $ \s -> s
+        { ceskStateExp = exp0
+        , ceskStateCont = CESKContLetK var exp1 ceskStateEnv ceskStateCont
+        }
     ANFExpAtomic aexp -> do
       evalAtomic aexp >>= ceskApplyCont
     ANFExpComplex (ANFComplexApp aexps) -> do
       case aexps of
+        -- Check for an intrinsic call.
+        (ANFAtomicVar var@(ANFVar n)):args
+          | Nothing <- Map.lookup var ceskStateEnv
+          , Just i <- Map.lookup ("@" <> n) intrinsicMap -> do
+          vals <- forM args evalAtomic
+          val <- ceskIntrinsicFunc i vals
+          ceskApplyCont val
+        -- Check for a normal application.
         (arg0:args) -> do
           func <- evalAtomic arg0
           vals <- forM args evalAtomic
@@ -326,14 +341,14 @@ ceskStep = do
     ANFExpComplex (ANFComplexIf aexp exp0 exp1) -> do
       evalAtomic aexp >>= \case
         CESKValBool True ->
-          modifyState $ const $ CESKState exp0 env store cont
+          modifyState $ \s -> s { ceskStateExp = exp0 }
         CESKValBool False ->
-          modifyState $ const $ CESKState exp1 env store cont
+          modifyState $ \s -> s { ceskStateExp = exp1 }
         _otherwise ->
           throwError CESKErrorIfExpression
     ANFExpComplex (ANFComplexCallCC aexp) -> do
       f <- evalAtomic aexp
-      ceskApplyProc f [CESKValCont cont]
+      ceskApplyProc f [CESKValCont ceskStateCont]
     ANFExpComplex (ANFComplexSet var aexp) -> do
       addr <- ceskEnvGet var
       evalAtomic aexp >>= ceskStorePutVal addr
@@ -365,15 +380,19 @@ ceskApplyCont :: CESKVal -> CESK ()
 ceskApplyCont val = do
   CESKState{..} <- gets ceskMachineState
   case ceskStateCont of
-    CESKCont var exp env cont -> do
+    CESKContLetK var exp env cont -> do
       modifyState $ \s -> s
         { ceskStateExp = exp
         , ceskStateEnv = env
         , ceskStateCont = cont
         }
       ceskPutVar var val
-    CESKHalt {} -> do
-      throwError CESKErrorHaltApplication
+    CESKContHalt {} -> do
+      let var = ANFVar "__cesk_final"
+      modifyState $ \s -> s
+        { ceskStateExp = ANFExpAtomic $ ANFAtomicVar var
+        }
+      ceskPutVar var val
 
 -- | Defines an empty environment.
 ceskEnvEmpty :: CESKEnv
@@ -542,12 +561,12 @@ ceskEvacuateState (CESKState exp env store cont) = do
 -- | Evacuates a continuation.
 ceskEvacuateCont :: CESKStore -> CESKStore -> CESKCont -> CESK (CESKStore, CESKStore, CESKCont)
 ceskEvacuateCont storeFrom storeTo = \case
-  CESKHalt -> do
-    pure (storeFrom, storeTo, CESKHalt)
-  CESKCont var exp env cont -> do
+  CESKContHalt -> do
+    pure (storeFrom, storeTo, CESKContHalt)
+  CESKContLetK var exp env cont -> do
     (from0, to0, env') <- ceskEvacuateEnv storeFrom storeTo env
     (from', to', cont') <- ceskEvacuateCont from0 to0 cont
-    pure (from', to', CESKCont var exp env' cont')
+    pure (from', to', CESKContLetK var exp env' cont')
 
 -- | Evacuates an environment.
 ceskEvacuateEnv :: CESKStore -> CESKStore -> CESKEnv -> CESK (CESKStore, CESKStore, CESKEnv)

@@ -33,7 +33,7 @@ testOneEnv = testCase "one env" $ do
     (store, addr) <- storeAlloc storeEmpty CESKValVoid CESKStoreWhite
     let exp = aBool False
     let env = Map.fromList [(ANFVar "x", addr)]
-    let state = CESKState exp env store CESKHalt
+    let state = CESKState exp env store CESKContHalt
     (stateEvac, state') <- ceskGarbageCollect state
     pure (addr, state, stateEvac, state')
   assertEqual "addr" a0 addr
@@ -54,7 +54,7 @@ testOneCont = testCase "one cont" $ do
     (store, addr) <- storeAlloc storeEmpty val CESKStoreWhite
     let exp = aBool False
     let env = Map.fromList [(ANFVar "x", addr)]
-    let cont = CESKCont (ANFVar "y") (aInt 2) env CESKHalt
+    let cont = CESKContLetK (ANFVar "y") (aInt 2) env CESKContHalt
     let state = CESKState exp env store cont
     (stateEvac, state') <- ceskGarbageCollect state
     pure (addr, state, stateEvac, state')
@@ -79,40 +79,40 @@ testContCycle = testCase "cont cycle" $ do
     let env0 = Map.fromList [(ANFVar "x0", addr2)]
     let env1 = Map.fromList [(ANFVar "x1", addr0)]
     let env2 = Map.fromList [(ANFVar "x2", addr1)]
-    let cont0 = CESKCont (ANFVar "y0") (aInt 2) env0 CESKHalt
-    let cont1 = CESKCont (ANFVar "y1") (aInt 2) env1 CESKHalt
-    let cont2 = CESKCont (ANFVar "y2") (aInt 2) env2 CESKHalt
+    let cont0 = CESKContLetK (ANFVar "y0") (aInt 2) env0 CESKContHalt
+    let cont1 = CESKContLetK (ANFVar "y1") (aInt 2) env1 CESKContHalt
+    let cont2 = CESKContLetK (ANFVar "y2") (aInt 2) env2 CESKContHalt
     store3 <- storePutVal store2 addr0 (CESKValCont cont0)
     store4 <- storePutVal store3 addr1 (CESKValCont cont1)
     store5 <- storePutVal store4 addr2 (CESKValCont cont2)
     state <- pure $ CESKState (aBool False)
-      env store5 CESKHalt
+      env store5 CESKContHalt
     (stateEvac, state') <- ceskGarbageCollect state
     pure (state, stateEvac, state')
   assertEqual "store orig"
     (Map.fromList
       [ (a0, CESKStoreVal CESKStoreWhite
-          (CESKValCont (CESKCont (ANFVar "y0") (aInt 2)
-          (Map.fromList [(ANFVar "x0", a2)]) CESKHalt)))
+          (CESKValCont (CESKContLetK (ANFVar "y0") (aInt 2)
+          (Map.fromList [(ANFVar "x0", a2)]) CESKContHalt)))
       , (a1, CESKStoreVal CESKStoreWhite
-          (CESKValCont (CESKCont (ANFVar "y1") (aInt 2)
-          (Map.fromList [(ANFVar "x1", a0)]) CESKHalt)))
+          (CESKValCont (CESKContLetK (ANFVar "y1") (aInt 2)
+          (Map.fromList [(ANFVar "x1", a0)]) CESKContHalt)))
       , (a2, CESKStoreVal CESKStoreWhite
-          (CESKValCont (CESKCont (ANFVar "y2") (aInt 2)
-          (Map.fromList [(ANFVar "x2", a1)]) CESKHalt)))
+          (CESKValCont (CESKContLetK (ANFVar "y2") (aInt 2)
+          (Map.fromList [(ANFVar "x2", a1)]) CESKContHalt)))
       ])
     (stateSpace state)
   assertEqual "store new"
     (Map.fromList
       [ (a0, CESKStoreVal CESKStoreWhite
-          (CESKValCont (CESKCont (ANFVar "y2") (aInt 2)
-          (Map.fromList [(ANFVar "x2", a1)]) CESKHalt)))
+          (CESKValCont (CESKContLetK (ANFVar "y2") (aInt 2)
+          (Map.fromList [(ANFVar "x2", a1)]) CESKContHalt)))
       , (a1, CESKStoreVal CESKStoreWhite
-          (CESKValCont (CESKCont (ANFVar "y1") (aInt 2)
-          (Map.fromList [(ANFVar "x1", a2)]) CESKHalt)))
+          (CESKValCont (CESKContLetK (ANFVar "y1") (aInt 2)
+          (Map.fromList [(ANFVar "x1", a2)]) CESKContHalt)))
       , (a2, CESKStoreVal CESKStoreWhite
-          (CESKValCont (CESKCont (ANFVar "y0") (aInt 2)
-          (Map.fromList [(ANFVar "x0", a0)]) CESKHalt)))
+          (CESKValCont (CESKContLetK (ANFVar "y0") (aInt 2)
+          (Map.fromList [(ANFVar "x0", a0)]) CESKContHalt)))
       ])
     (stateSpace state')
   assertEqual "store old"
@@ -139,7 +139,7 @@ testClosCycle = testCase "clos cycle" $ do
     store3 <- storePutVal store2 addr0 clos0
     store4 <- storePutVal store3 addr1 clos1
     store5 <- storePutVal store4 addr2 clos2
-    let state = CESKState (aBool False) env store5 CESKHalt
+    let state = CESKState (aBool False) env store5 CESKContHalt
     (stateEvac, state') <- ceskGarbageCollect state
     pure (state, stateEvac, state')
   assertEqual "store orig"

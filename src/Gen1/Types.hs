@@ -111,8 +111,8 @@ data CESKStoreColor
 
 -- | Defines a continuation.
 data CESKCont
-  = CESKCont ANFVar ANFExp CESKEnv CESKCont
-  | CESKHalt
+  = CESKContLetK ANFVar ANFExp CESKEnv CESKCont
+  | CESKContHalt
     deriving (Eq, Ord, Show)
 
 -- | Defines a value.
@@ -183,7 +183,7 @@ ceskDefaultState = CESKState
   { ceskStateExp   = ANFExpAtomic ANFAtomicVoid
   , ceskStateEnv   = envEmpty
   , ceskStateStore = storeEmpty
-  , ceskStateCont  = CESKHalt
+  , ceskStateCont  = CESKContHalt
   }
 
 -- | Defines the initial machine.
@@ -247,6 +247,7 @@ data CESKError
   | CESKErrorUnexpectedForward CESKAddr
   | CESKErrorUnexpectedColor CESKStoreColor
   | CESKErrorListValue Text
+  | CESKErrorConversion Text Text
     deriving (Eq, Ord, Show)
 
 -- | Renders an error in human compatible form.
@@ -294,6 +295,8 @@ ceskErrorHumanize = \case
     "unexpected color " <> textShow color
   CESKErrorListValue val ->
     "bad value in list: " <> val
+  CESKErrorConversion from to ->
+    "cannot convert " <> from <> " to " <> to
 
 -- | Renders a value in human compatible form.
 ceskValHumanize :: CESKVal -> Text

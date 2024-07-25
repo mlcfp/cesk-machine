@@ -17,6 +17,7 @@ import Control.Monad.Except (throwError)
 import Gen1.ANF
 import Gen1.Types
 import Gen1.Util
+import Text.Read (readMaybe)
 
 -- | Create declaration wrappers for all the intrinsics.
 ceskIntrinsicWrappers :: CESK [ANFDec]
@@ -43,50 +44,90 @@ ceskWrapperDec name name' x = do
 
 -- | A map of intrinsic functions keyed by name.
 intrinsicMap :: Map Text CESKIntrinsic
-intrinsicMap = Map.fromList $ map (\(n, p, a, f) ->
-  (n, CESKIntrinsic n p
-    (if a == -1 then CESKArityAny else CESKArityFixed a) f))
-  [ ("@sin", "sin", 1, mathUnary sin)
-  , ("@cos", "cos", 1, mathUnary cos)
-  , ("@tan", "tan", 1, mathUnary tan)
-  , ("@asin", "asin", 1, mathUnary asin)
-  , ("@acos", "acos", 1, mathUnary acos)
-  , ("@atan", "atan", 1, mathUnary atan)
-  , ("@sinh", "sinh", 1, mathUnary sinh)
-  , ("@cosh", "cosh", 1, mathUnary cosh)
-  , ("@tanh", "tanh", 1, mathUnary tanh)
-  , ("@asinh", "asinh", 1, mathUnary asinh)
-  , ("@acosh", "acosh", 1, mathUnary acosh)
-  , ("@atanh", "atanh", 1, mathUnary atanh)
-  , ("@exp", "exp", 1, mathUnary exp)
-  , ("@log", "log", 1, mathUnary log)
-  , ("@sqrt", "sqrt", 1, mathUnary sqrt)
-  , ("@pi", "pi", 0, mathNone pi)
+intrinsicMap =
+  Map.fromList $ map (\(n, a, f) ->
+    (name n, CESKIntrinsic (name n) n (arity a) f))
+    intrinsicList
+  where
+    name x = "@" <> x
+    arity x
+      | x == -1 = CESKArityAny
+      | otherwise = CESKArityFixed x
 
-  , ("@string-length", "string-length", 1, strLen)
-  , ("@string-char", "string-char", 2, strChar)
-  , ("@string-upper", "string-upper", 1, strUpper)
-  , ("@string-lower", "string-lower", 1, strLower)
-  , ("@string-list", "string-list", 1, strList)
-  , ("@string-make", "string-make", 1, strMake)
-  , ("@string-append", "string-append", 2, strAppend)
-  , ("@string-part", "string-part", 3, strPart)
+-- | The list of available built-in functions.
+intrinsicList :: [(Text, Int, CESKIntrinsicFunc)]
+intrinsicList = concat
+  [ typeIntrinsics
+  , pairIntrinsics
+  , mathIntrinsics
+  , stringIntrinsics
+  , convIntrinsics
+  ]
 
-  , ("@char?", "char?", 1, testChar)
-  , ("@string?", "string?", 1, testStr)
-  , ("@int?", "int?", 1, testInt)
-  , ("@float?", "float?", 1, testFloat)
-  , ("@number?", "number?", 1, testNumber)
-  , ("@bool?", "bool?", 1, testBool)
-  , ("@void?", "void?", 1, testVoid)
-  , ("@pair?", "pair?", 1, testPair)
+-- | The list of available built-in type functions.
+typeIntrinsics :: [(Text, Int, CESKIntrinsicFunc)]
+typeIntrinsics =
+  [ ("char?",   1, testChar)
+  , ("string?", 1, testStr)
+  , ("int?",    1, testInt)
+  , ("float?",  1, testFloat)
+  , ("number?", 1, testNumber)
+  , ("bool?",   1, testBool)
+  , ("void?",   1, testVoid)
+  , ("pair?",   1, testPair)
+  ]
 
-  , ("@null", "null", 0, pairNull)
-  , ("@cons", "cons", 2, pairCons)
-  , ("@head", "head", 1, pairHead)
-  , ("@tail", "tail", 1, pairTail)
-  -- Do not make a wrapper for list, since the arity is variable.
-  , ("@list", "list", -1, pairList)
+-- | The list of available built-in pair functions.
+pairIntrinsics :: [(Text, Int, CESKIntrinsicFunc)]
+pairIntrinsics =
+  [ ("null",  0, pairNull)
+  , ("cons",  2, pairCons)
+  , ("head",  1, pairHead)
+  , ("tail",  1, pairTail)
+  , ("list", -1, pairList)
+  ]
+
+-- | The list of available built-in math functions.
+mathIntrinsics :: [(Text, Int, CESKIntrinsicFunc)]
+mathIntrinsics =
+  [ ("sin",   1, mathUnary sin)
+  , ("cos",   1, mathUnary cos)
+  , ("tan",   1, mathUnary tan)
+  , ("asin",  1, mathUnary asin)
+  , ("acos",  1, mathUnary acos)
+  , ("atan",  1, mathUnary atan)
+  , ("sinh",  1, mathUnary sinh)
+  , ("cosh",  1, mathUnary cosh)
+  , ("tanh",  1, mathUnary tanh)
+  , ("asinh", 1, mathUnary asinh)
+  , ("acosh", 1, mathUnary acosh)
+  , ("atanh", 1, mathUnary atanh)
+  , ("exp",   1, mathUnary exp)
+  , ("log",   1, mathUnary log)
+  , ("sqrt",  1, mathUnary sqrt)
+  , ("pi",    0, mathNone pi)
+  ]
+
+-- | The list of available built-in string functions.
+stringIntrinsics :: [(Text, Int, CESKIntrinsicFunc)]
+stringIntrinsics =
+  [ ("string-length", 1, strLen)
+  , ("string-char",   2, strChar)
+  , ("string-upper",  1, strUpper)
+  , ("string-lower",  1, strLower)
+  , ("string-list",   1, strList)
+  , ("string-make",   1, strMake)
+  , ("string-append", 2, strAppend)
+  , ("string-part",   3, strPart)
+  ]
+
+-- | The list of available built-in conversion functions.
+convIntrinsics :: [(Text, Int, CESKIntrinsicFunc)]
+convIntrinsics =
+  [ ("read-int",   1, readInt)
+  , ("read-float", 1, readFloat)
+  , ("show-int",   1, showInt)
+  , ("show-float", 1, showFloat)
   ]
 
 -- | Runs a math function that takes no argument.
@@ -295,3 +336,33 @@ pairList vals =
     go [] = CESKValNull
     go (x:[]) = CESKValPair x CESKValNull
     go (x:xs) = CESKValPair x $ go xs
+
+-- | Converts a string to an int.
+readInt :: [CESKVal] -> CESK CESKVal
+readInt = \case
+  (CESKValStr x):[] ->
+    case readMaybe (T.unpack x) of
+      Just y -> pure $ CESKValInt y
+      Nothing -> throwError $ CESKErrorConversion x "int"
+  _ -> throwError CESKErrorIntrinsicArgs
+
+-- | Converts a string to an float.
+readFloat :: [CESKVal] -> CESK CESKVal
+readFloat = \case
+  (CESKValStr x):[] ->
+    case readMaybe (T.unpack x) of
+      Just y -> pure $ CESKValFloat y
+      Nothing -> throwError $ CESKErrorConversion x "float"
+  _ -> throwError CESKErrorIntrinsicArgs
+
+-- | Converts an int value to a string.
+showInt :: [CESKVal] -> CESK CESKVal
+showInt = \case
+  (CESKValInt x):[] -> pure $ CESKValStr $ textShow x
+  _ -> throwError CESKErrorIntrinsicArgs
+
+-- | Converts a float value to a string.
+showFloat :: [CESKVal] -> CESK CESKVal
+showFloat = \case
+  (CESKValFloat x):[] -> pure $ CESKValStr $ textShow x
+  _ -> throwError CESKErrorIntrinsicArgs
