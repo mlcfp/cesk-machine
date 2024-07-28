@@ -17,6 +17,7 @@ import Text.RawString.QQ
 import Gen1.CESK
 import Gen1.Normalize
 import Gen1.Scheme
+import Gen1.Sugar
 import Options.Applicative
 
 -- | Defines the application main.
@@ -72,7 +73,9 @@ schemeRunFile path = do
 schemeRun :: Text -> IO (Either Text Text)
 schemeRun code = runExceptT $ do
   prog <- ExceptT $ pure $ schemeParse code
-  norm <- ExceptT $ fmap Right $ normalizeProg prog
+  sugar <- ExceptT $ pure $
+    mapLeft desugarErrorHumanize $ schemeDesugar prog
+  norm <- ExceptT $ fmap Right $ normalizeProg sugar
   anf <- ExceptT $ pure $ schemeANF norm
   ExceptT $ mapLeft ceskErrorHumanize . mapRight ceskValHumanize <$>
     ceskExec ceskDefaultOptions anf

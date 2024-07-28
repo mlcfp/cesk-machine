@@ -33,6 +33,7 @@ library
       Gen1.Normalize
       Gen1.Parse
       Gen1.Scheme
+      Gen1.Sugar
       Gen1.Types
       Gen1.Util
   other-modules:

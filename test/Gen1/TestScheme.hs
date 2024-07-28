@@ -10,6 +10,7 @@ import qualified Data.Text as T
 import Gen1.CESK
 import Gen1.Normalize
 import Gen1.Scheme
+import Gen1.Sugar
 import Test.Framework (Test, testGroup)
 import Test.Framework.Providers.HUnit (testCase)
 import Test.HUnit (assertEqual)
@@ -21,6 +22,8 @@ tests = testGroup "Gen1.Scheme"
   , testParseFactorial
   , testPrintFactorial
   , testRunFactorial
+  , testSequence
+  , testDesugar
   ]
 
 testParseDefine :: Test
@@ -143,23 +146,120 @@ factorialScheme = [r|
   (factorial 20)
 |]
 
-schemeRun code = do
+schemeNorm code = do
   case schemeParse code of
     Left err -> do
       error $ T.unpack err
     Right prog -> do
-      prog' <- normalizeProg prog
-      code' <- schemeRender schemeRenderOptions prog'
-      ceskRun ceskDefaultOptions code'
+      normalizeProg prog
+
+schemeRun code = do
+  prog' <- schemeNorm code
+  code' <- schemeRender schemeRenderOptions prog'
+  ceskRun ceskDefaultOptions code'
 
 schemeExec code = do
-  case schemeParse code of
-    Left err -> do
-      error $ T.unpack err
-    Right prog -> do
-      prog' <- normalizeProg prog
-      case schemeANF prog' of
-        Left e2 ->
-          error $ T.unpack e2
-        Right p2 ->
-          ceskExec' p2
+  prog' <- schemeNorm code
+  case schemeANF prog' of
+    Left e2 ->
+      error $ T.unpack e2
+    Right p2 ->
+      ceskExec' p2
+
+testSequence :: Test
+testSequence = testCase "sequence" $ do
+  assertEqual "begin 1"
+    (Right (SchemeProg [SchemeDecBegin [SchemeDecExp (SchemeExpInt 1)]]))
+    $ schemeParse [r|(begin 1)|]
+
+  assertEqual "begin 2"
+    (Right (SchemeProg
+      [ SchemeDecBegin
+        [ SchemeDecExp (SchemeExpSet (SchemeVar "x") (SchemeExpInt 1))
+        , SchemeDecExp (SchemeExpSet (SchemeVar "y") (SchemeExpInt 2))
+        , SchemeDecExp (SchemeExpApp
+          [ SchemeExpVar (SchemeVar "*")
+          , SchemeExpVar (SchemeVar "y")
+          , SchemeExpVar (SchemeVar "x")
+          ])
+        ]
+      ]))
+    $ schemeParse beginProg
+
+  Right prog <- pure $ schemeParse beginProg
+  schemeRender schemeRenderOptions
+    { schemeRenderOptionStyle = SchemeRenderPretty } prog >>=
+      assertEqual "begin 3" beginProgRender
+
+beginProg = [r|
+  (begin
+    (set! x 1)
+    (set! y 2)
+    (* y x))
+|]
+
+beginProgRender = [r|(begin
+  (set! x 1)
+  (set! y 2)
+  (* y x))|]
+
+desugar p = do
+  let Right p' = schemeParse p
+  let Right s = desugarBegin p'
+  schemeRender schemeRenderOptions s
+
+desugarNorm p = do
+  let Right p' = schemeParse p
+  let Right s = desugarBegin p'
+  p2 <- normalizeProg s
+  schemeRender schemeRenderOptions p2
+
+testDesugar :: Test
+testDesugar = testCase "desugar" $ do
+  desugar [r|
+    (let ((_x (begin (+ 2 3) 1)))
+      _x)
+  |] >>= assertEqual "desugar 1"
+    "(let ((_x ((λ (__r) 1) (+ 2 3)))) _x)"
+
+  desugar [r|
+    (let ((_x (begin (* 1 1) (+ 2 3) 1)))
+      _x)
+  |] >>= assertEqual "desugar 2"
+    "(let ((_x ((λ (__r) ((λ (__r) 1) (+ 2 3))) (* 1 1)))) _x)"
+
+  desugar [r|
+    (let ((_x (begin (+ 2 3) 1)))
+      (begin
+        (set! _x 6)
+        (set! _x 7)
+        _x))
+  |] >>= assertEqual "desugar 3"
+    "(let ((_x ((λ (__r) 1) (+ 2 3)))) \
+      \((λ (__r) ((λ (__r) _x) (set! _x 7))) (set! _x 6)))"
+
+  a <- desugarNorm [r|
+    (let ((x 0))
+      (let ((y (set! x 6)))
+        y))
+  |]
+  assertEqual "desugar 4"
+    "(let ((x 0)) (let ((_0 (set! x 6))) (let ((y (void))) y)))" a
+  schemeRun a >>= assertEqual "desugar 5" (Right CESKValVoid)
+
+  desugar [r|
+    (let ((_x (begin (+ 2 3) 1)))
+      (begin
+        (set! _x 6)
+        (set! _x 7)
+        _x))
+  |] >>= schemeRun >>= assertEqual "desugar 6"
+    (Right $ CESKValInt 7)
+
+  desugar [r|
+    (let ((_x (begin (+ 2 3) 1)))
+      (begin
+        (set! _x 6)
+        (set! _x 7)))
+  |] >>= schemeRun >>= assertEqual "desugar 7"
+    (Right $ CESKValVoid)

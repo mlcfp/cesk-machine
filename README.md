@@ -22,9 +22,14 @@ This presentation has a nice diagram for two-space garbage collection.
 
 - [Copying Garbage Collection](https://users.cs.northwestern.edu/~stamourv/teaching/321-F19/16a-gc-copying.pdf)
 
+Steele and Sussman's paper discusses sequencing in functional programs.
+
+- [Lambda: The Ultimate Imperative](https://dspace.mit.edu/handle/1721.1/5790)
 
 ## TODO
 
+- add main option to output after any stage to see intermediate results
+- unify the stages under IO and error handling ease chaining
 - clean up compile warnings
 - add word values (bytes?)
 - add array/vector
@@ -57,3 +62,4 @@ This presentation has a nice diagram for two-space garbage collection.
 - add signed numbers
 - add pair values for cons, lists, etc
 - add `begin` to dec lexer
+- desugar begin

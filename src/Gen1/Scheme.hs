@@ -39,6 +39,7 @@ import Text.Megaparsec.Char
 --        |  (set! <var> <exp>)
 --        |  (λ (<name> ...) <exp>)
 --        |  (<exp> ...)
+--        |  (begin <exp> ...)
 --        |  <number>
 --        |  <boolean>
 --        |  <string>
@@ -64,6 +65,7 @@ data SchemeDec
 -- | Defines an expression.
 data SchemeExp
   = SchemeExpApp [SchemeExp]
+  | SchemeExpBegin [SchemeExp]
   | SchemeExpLet [SchemeBind] SchemeExp
   | SchemeExpLetRec [SchemeBind] SchemeExp
   | SchemeExpIf SchemeExp SchemeExp SchemeExp
@@ -204,6 +206,14 @@ renderExp :: SchemeExp -> SchemeRender ()
 renderExp = \case
   SchemeExpApp exps -> do
     renderOpen
+    forM_ (zip [0..] exps) $ \(i :: Int, e) -> do
+      when (i > 0) renderSpace
+      renderExp e
+    renderClose
+  SchemeExpBegin exps -> do
+    renderOpen
+    renderText "begin"
+    renderSpace
     forM_ (zip [0..] exps) $ \(i :: Int, e) -> do
       when (i > 0) renderSpace
       renderExp e
@@ -360,6 +370,7 @@ parseExp = choice
   -- plus and minus are not confused as signs on number.
   , try $ SchemeExpVar <$> parseVar
   , try parseNumber
+  , try parseSequence
   , parseApp
   ]
 
@@ -416,6 +427,12 @@ parseSet =
   parseParens $ do
     void $ parseSymbol "set!"
     SchemeExpSet <$> parseVar <*> parseExp
+
+-- | Parses a begin sequence.
+parseSequence :: Parser SchemeExp
+parseSequence = parseParens $ do
+  void $ parseSymbol "begin"
+  SchemeExpBegin <$> some parseExp
 
 -- | Parses an application.
 parseApp :: Parser SchemeExp

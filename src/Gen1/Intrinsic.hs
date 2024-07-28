@@ -57,7 +57,8 @@ intrinsicMap =
 -- | The list of available built-in functions.
 intrinsicList :: [(Text, Int, CESKIntrinsicFunc)]
 intrinsicList = concat
-  [ typeIntrinsics
+  [ voidIntrinsics
+  , typeIntrinsics
   , pairIntrinsics
   , mathIntrinsics
   , stringIntrinsics
@@ -65,26 +66,31 @@ intrinsicList = concat
   ]
 
 -- | The list of available built-in type functions.
+voidIntrinsics :: [(Text, Int, CESKIntrinsicFunc)]
+voidIntrinsics =
+  [ ("void",  -1, voidApply)
+  , ("void?",  1, voidTest)
+  ]
+
+-- | The list of available built-in type functions.
 typeIntrinsics :: [(Text, Int, CESKIntrinsicFunc)]
 typeIntrinsics =
   [ ("char?",   1, testChar)
-  , ("string?", 1, testStr)
   , ("int?",    1, testInt)
   , ("float?",  1, testFloat)
   , ("number?", 1, testNumber)
   , ("bool?",   1, testBool)
-  , ("void?",   1, testVoid)
-  , ("pair?",   1, testPair)
   ]
 
 -- | The list of available built-in pair functions.
 pairIntrinsics :: [(Text, Int, CESKIntrinsicFunc)]
 pairIntrinsics =
-  [ ("null",  0, pairNull)
-  , ("cons",  2, pairCons)
-  , ("head",  1, pairHead)
-  , ("tail",  1, pairTail)
-  , ("list", -1, pairList)
+  [ ("null",   0, pairNull)
+  , ("cons",   2, pairCons)
+  , ("head",   1, pairHead)
+  , ("tail",   1, pairTail)
+  , ("list",  -1, pairList)
+  , ("pair?",  1, pairTest)
   ]
 
 -- | The list of available built-in math functions.
@@ -119,6 +125,7 @@ stringIntrinsics =
   , ("string-make",   1, strMake)
   , ("string-append", 2, strAppend)
   , ("string-part",   3, strPart)
+  , ("string?",       1, strTest)
   ]
 
 -- | The list of available built-in conversion functions.
@@ -129,6 +136,20 @@ convIntrinsics =
   , ("show-int",   1, showInt)
   , ("show-float", 1, showFloat)
   ]
+
+-- | Applies a void.
+voidApply :: [CESKVal] -> CESK CESKVal
+voidApply _ = pure CESKValVoid
+
+-- | Tests whether a value is a void.
+voidTest :: [CESKVal] -> CESK CESKVal
+voidTest = \case
+  (CESKValVoid:[]) ->
+    pure $ CESKValBool True
+  (_:[]) ->
+    pure $ CESKValBool False
+  _otherwise ->
+    throwError CESKErrorIntrinsicArgs
 
 -- | Runs a math function that takes no argument.
 mathNone :: Double -> [CESKVal] -> CESK CESKVal
@@ -222,20 +243,20 @@ strPart = \case
   _otherwise ->
     throwError CESKErrorIntrinsicArgs
 
--- | Tests whether a value is a char.
-testChar :: [CESKVal] -> CESK CESKVal
-testChar = \case
-  (CESKValChar _):[] ->
+-- | Tests whether a value is a string.
+strTest :: [CESKVal] -> CESK CESKVal
+strTest = \case
+  (CESKValStr _):[] ->
     pure $ CESKValBool True
   (_:[]) ->
     pure $ CESKValBool False
   _otherwise ->
     throwError CESKErrorIntrinsicArgs
 
--- | Tests whether a value is a string.
-testStr :: [CESKVal] -> CESK CESKVal
-testStr = \case
-  (CESKValStr _):[] ->
+-- | Tests whether a value is a char.
+testChar :: [CESKVal] -> CESK CESKVal
+testChar = \case
+  (CESKValChar _):[] ->
     pure $ CESKValBool True
   (_:[]) ->
     pure $ CESKValBool False
@@ -284,26 +305,6 @@ testBool = \case
   _otherwise ->
     throwError CESKErrorIntrinsicArgs
 
--- | Tests whether a value is a void.
-testVoid :: [CESKVal] -> CESK CESKVal
-testVoid = \case
-  (CESKValVoid:[]) ->
-    pure $ CESKValBool True
-  (_:[]) ->
-    pure $ CESKValBool False
-  _otherwise ->
-    throwError CESKErrorIntrinsicArgs
-
--- | Tests whether a value is a pair.
-testPair :: [CESKVal] -> CESK CESKVal
-testPair = \case
-  (CESKValPair{}:[]) ->
-    pure $ CESKValBool True
-  (_:[]) ->
-    pure $ CESKValBool False
-  _otherwise ->
-    throwError CESKErrorIntrinsicArgs
-
 -- | Creates a null.
 pairNull :: [CESKVal] -> CESK CESKVal
 pairNull = \case
@@ -336,6 +337,16 @@ pairList vals =
     go [] = CESKValNull
     go (x:[]) = CESKValPair x CESKValNull
     go (x:xs) = CESKValPair x $ go xs
+
+-- | Tests whether a value is a pair.
+pairTest :: [CESKVal] -> CESK CESKVal
+pairTest = \case
+  (CESKValPair{}:[]) ->
+    pure $ CESKValBool True
+  (_:[]) ->
+    pure $ CESKValBool False
+  _otherwise ->
+    throwError CESKErrorIntrinsicArgs
 
 -- | Converts a string to an int.
 readInt :: [CESKVal] -> CESK CESKVal

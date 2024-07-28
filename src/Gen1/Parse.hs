@@ -61,14 +61,20 @@ parseString = parseLexeme $
 -- | Parses an identifier.
 parseIdentifier :: Parser Text
 parseIdentifier = parseLexeme $ do
-  x <- some letterChar
+  x <- some  $ choice
+    [ underscore
+    , letterChar
+    ]
   y <- many $ choice
     [ char '-'
     , char '?'
     , char '>'
+    , underscore
     , alphaNumChar
     ]
   pure $ T.pack x <> T.pack y
+  where
+    underscore = char '_'
 
 -- | Parses something between parentheses.
 parseParens :: Parser a -> Parser a
